@@ -37,7 +37,7 @@ Creates a new session and returns a Session Object.
 ```
 
 **Response:**
-The ephemeral key is fou
+
 ```json
 {
   "id": "sess_001",
