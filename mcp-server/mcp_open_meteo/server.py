@@ -7,8 +7,12 @@ This example demonstrates clean MCP server development.
 """
 
 import sys
+import logging
 from pathlib import Path
 from mcp.server.fastmcp import FastMCP
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
+logger = logging.getLogger("OpenMeteoMCP")
 
 # Support both package imports and direct execution
 try:
@@ -33,7 +37,8 @@ register_prompts(mcp)
 
 def main():
     """Main entry point for the MCP server"""
-    mcp.run()
+    logger.info("MCP Open-Meteo Weather server starting")
+    mcp.run(transport="streamable-http")
 
 
 if __name__ == "__main__":
