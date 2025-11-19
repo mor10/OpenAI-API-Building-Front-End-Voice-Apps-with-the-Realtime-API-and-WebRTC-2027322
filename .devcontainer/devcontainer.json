@@ -20,7 +20,7 @@
   // Update welcome text and set terminal prompt to '$ '
   "onCreateCommand": "echo PS1='\"$ \"' >> ~/.bashrc",
   // Install dependencies for the auth-server
-  "postCreateCommand": "cd auth-server && npm install",
+  "postCreateCommand": "cd auth-server && npm install && curl -LsSf https://astral.sh/uv/install.sh | sh",
   // Forward port for the auth-server and make it public
   "forwardPorts": [
     3000

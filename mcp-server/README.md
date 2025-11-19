@@ -3,21 +3,22 @@
 This MCP server interfaces with the [Open-Meteo API](https://open-meteo.com/en/docs) and offers tools to fetch current weather conditions and weather forecasts for any location worldwide.
 
 ## Requirements
+This project requires [uv](https://docs.astral.sh/uv/getting-started/installation/)
+  
+#### MacOS / Linux:
+Use curl to download the script and execute it with sh:
 
-- [uv](https://docs.astral.sh/uv/):
-   - macOS via Homebrew:
-   ```bash
-   brew install uv
-   ```
-   - Windows via WinGet:
-   ```bash
-   winget install --id=astral-sh.uv  -e
-   ```
-- [Visual Studio Code](https://code.visualstudio.com/) or another code editor
-- For testing in Claude:
-  - [Claude.ai account](https://claude.ai) (MCP support is available for all account types)
-  - [Claude Desktop app](https://claude.ai/download), available for macOS and Windows
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
+#### Windows:
+Use irm to download the script and execute it with iex:
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
+```
+  
 ## Development
 
 ### 1. Set up the uv environment
