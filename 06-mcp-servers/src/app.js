@@ -1,63 +1,29 @@
 /**
- * OpenAI Realtime API via WebRTC
- * ==============================
+ * OpenAI Realtime API via WebRTC with MCP Server Integration
+ * ==========================================================
  *
- * Bare-bones JavaScript implementation of OpenAI's Realtime API using WebRTC.
+ * Enhanced JavaScript implementation of OpenAI's Realtime API using WebRTC.
+ * This version replaces the internal tool with calls to an external MCP Server
+ * exposing tools and resources for weather data from Open-Meteo.
  *
- * This example shows a how to establish a bidirectional audio connection where:
- * - The user talks to the AI through the computer microphone
- * - The AI responds in the selected voice using the specified model
- * - The user can interrupt the AI mid-sentence and the AI updates its response
- *
- * Other features:
- * - Sends an initial prompt triggering a voice greeting on successful connection.
- * - A status display shows the current state of the connection.
- * - Comprehensive console logging of events for observability and debugging.
- *
+ * The example MCP Server is provided in the `../mcp-server` directory.
+ * Follow the instructions in `../mcp-server/README.md` to set up and run the server.
  *
  * NOTE: This demo authenticates API requests using an ephemeral key.
  * The key is obtained through a call to a custom auth server.
  * See `../auth-server/README.md` for details.
- *
- * Relevant links:
- * - https://platform.openai.com/docs/guides/realtime-webrtc
- * - https://platform.openai.com/docs/api-reference/realtime
- * - https://webrtc.org/
- * - https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/
- *
  */
 
-// URL to the auth server
-const SERVER_URL = "http://localhost:3000";
-// OpenAI realtime model
-const MODEL = "gpt-4o-realtime-preview-2024-12-17";
-// Voice model
-const VOICE = "verse"; // Options: alloy, ash, ballad, coral, echo, sage, shimmer, verse.
-// Welcome instructions
-const DEFAULT_WELCOME_INSTRUCTIONS =
-  "Greet the user and ask them what you can assist them with. Talk quickly and succinctly.";
-// Default instructions
-const DEFAULT_INSTRUCTIONS =
-  "You love ducks, and so does the user. Always frame your responses in terms of ducks!";
-// Turn detection
-const TURN_DETECTION = {
-  type: "server_vad", // Only current option
-  threshold: 0.5, // 0-1, Default: 0.5
-  prefix_padding_ms: 400, // Default: 300
-  silence_duration_ms: 700, // Default: 500
-  create_response: true, // Default: true. False creates no response.
-};
-// Max output tokens
-const MAX_OUTPUT_TOKENS = 200;
+import { CONFIG } from "./config.js";
+import { createVisualizer } from "./visualizer.js";
+import { getEphemeralKey } from "./auth-api.js";
+import { ChatUI } from "./chat.js";
 
 /**
  * RealtimeDemo Class
- * Manages the entire demo.
+ * Manages voice and text interactions with the Realtime API.
  */
 class RealtimeDemo {
-  /**
-   * Set state, get DOM elements, and set up event listeners for interaction.
-   */
   constructor() {
     // Initialize state
     this.peerConnection = null;
@@ -66,7 +32,10 @@ class RealtimeDemo {
     this.dataChannel = null;
     this.hasWelcomed = false;
     this.audioElement = null;
-    this.isTalking = true; // Start with mic enabled
+    this.isTalking = true;
+    this.micVisualizer = null;
+    this.aiVisualizer = null;
+    this.chatUI = null;
 
     // Get DOM elements
     this.connectionButton = document.getElementById("connection-button");
@@ -74,10 +43,11 @@ class RealtimeDemo {
     this.statusDiv = document.getElementById("status");
 
     // Bind event listeners
-    this.connectionButton.addEventListener("click", () =>
-      this.toggleConnection()
-    );
-    this.micButton.addEventListener("click", () => this.toggleMic());
+    this.connectionButton.addEventListener("click", () => this.toggleSession());
+    this.micButton.addEventListener("click", () => this.toggleTalk());
+
+    // Initialize chat UI with message handler
+    this.chatUI = new ChatUI((message) => this.handleChatMessage(message));
   }
 
   /**
@@ -95,6 +65,7 @@ class RealtimeDemo {
    * - Stops media streams
    * - Closes WebRTC connection
    * - Removes audio elements
+   * - Stops visualizers
    * - Resets UI state
    */
   closeConnection() {
@@ -110,30 +81,85 @@ class RealtimeDemo {
     if (this.dataChannel) {
       this.dataChannel.close();
     }
+    if (this.aiVisualizer) {
+      this.aiVisualizer.stop();
+    }
+    if (this.micVisualizer) {
+      this.micVisualizer.stop();
+    }
+    if (this.chatUI) {
+      this.chatUI.clearMessages();
+    }
 
     this.peerConnection = null;
     this.mediaStream = null;
     this.audioElement = null;
     this.dataChannel = null;
+    this.micVisualizer = null;
+    this.aiVisualizer = null;
     this.isConnected = false;
-    this.isTalking = true; // Reset to enabled state
+    this.isTalking = true;
     this.micButton.disabled = true;
     this.micButton.textContent = "Unmute Mic";
-    this.connectionButton.textContent = "Create Connection";
+    this.connectionButton.textContent = "Create Session";
     this.updateStatus("Not connected");
   }
 
   /**
-   * Incoming audio setup
+   * Text Chat Handler
+   * Processes text messages and requests text-only responses.
+   * Messages sent via text receive text-only responses.
+   *
+   * @param {string} message - The message to send to the API
+   */
+  handleChatMessage(message) {
+    if (!this.dataChannel || this.dataChannel.readyState !== "open") {
+      console.error("Data channel not ready");
+      return;
+    }
+
+    // Send the text message
+    const messageEvent = {
+      type: "conversation.item.create",
+      item: {
+        type: "message",
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: message,
+          },
+        ],
+      },
+    };
+    console.log("Sending text-only message:", messageEvent);
+    this.dataChannel.send(JSON.stringify(messageEvent));
+
+    // Request a text-only response using the same instructions as voice
+    const textResponseEvent = {
+      type: "response.create",
+      response: {
+        modalities: ["text"], // API returns only text
+        instructions: CONFIG.DEFAULTS.DEFAULT_INSTRUCTIONS,
+      },
+    };
+    console.log("Requesting text-only response:", textResponseEvent);
+    this.dataChannel.send(JSON.stringify(textResponseEvent));
+  }
+
+  /**
+   * Incoming Audio Setup
    * Sets up the audio element to play remote audio from the API.
+   * Also initializes the AI audio visualizer.
    *
    * @throws {Error} If audio element setup fails
    */
   async setupIncomingAudio() {
     try {
-      // Set up audio element first
-      // Note: This is a hacky way to get audio playback working.
-      // Creating invisible auto-playing audio DOM elements is not accessible.
+      // Initialize visualizer
+      const aiVisualizer = createVisualizer();
+
+      // Set up audio element
       this.audioElement = document.createElement("audio");
       this.audioElement.autoplay = true;
       document.body.appendChild(this.audioElement);
@@ -142,12 +168,14 @@ class RealtimeDemo {
       this.peerConnection.ontrack = (event) => {
         console.log("Received remote track:", event.track.kind);
         this.audioElement.srcObject = event.streams[0];
-
-        // Add `canplay` event listener to ensure audio is ready
         this.audioElement.addEventListener(
           "canplay",
           () => {
             console.log("Audio is ready to play");
+            this.aiVisualizer = aiVisualizer;
+            if (this.aiVisualizer.init(this.audioElement, event.streams[0])) {
+              console.log("Visualizer started successfully");
+            }
             this.audioElement
               .play()
               .catch((e) => console.error("Error playing audio:", e));
@@ -164,21 +192,25 @@ class RealtimeDemo {
   /**
    * Microphone Setup
    * Requests microphone access and adds the audio track to the WebRTC connection.
-   * NOTE: This triggers a permission dialog in the browser on first use.
+   * Also initializes the microphone visualizer.
    *
    * @throws {Error} If microphone access is denied or unavailable
    */
   async setupMicrophone() {
     try {
-      // Get local audio track for microphone input
       this.mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: true,
         video: false,
       });
 
-      // Add the microphone track to the peer connection
+      // Initialize visualizer
+      this.micVisualizer = createVisualizer("micVisualizer");
+      if (this.micVisualizer.init(null, this.mediaStream)) {
+        console.log("User Visualizer started successfully");
+      }
+
       const audioTrack = this.mediaStream.getAudioTracks()[0];
-      audioTrack.enabled = true; // Start unmuted
+      audioTrack.enabled = true;
       this.peerConnection.addTrack(audioTrack, this.mediaStream);
       console.log("Microphone setup complete");
     } catch (error) {
@@ -192,25 +224,21 @@ class RealtimeDemo {
    * Monitor the data channel for events:
    * - onopen: Send initial greeting, set instructions for the voice assistant
    * - onclose: Update connection status
-   * - onmessage: Process incoming messages from the API
+   * - onmessage: Process incoming messages from the API, including text responses
    */
   setupDataChannelHandlers() {
     this.dataChannel.onopen = () => {
       console.log("Data channel opened");
       this.updateStatus("Connected to Realtime API");
 
-      // On first connection, send a one-time instruction to the API.
-      // The Realtime API responds to text prompts with audio.
-      // Make the API issue a voice greeting when a connection is established.
       if (!this.hasWelcomed) {
         console.log("Sending welcome message");
         const welcomeEvent = {
           type: "response.create",
           response: {
             modalities: ["audio", "text"],
-            // Text prompt to the API
-            instructions: DEFAULT_WELCOME_INSTRUCTIONS,
-            max_output_tokens: MAX_OUTPUT_TOKENS,
+            instructions: CONFIG.DEFAULTS.WELCOME_INSTRUCTIONS,
+            max_output_tokens: CONFIG.API.MAX_OUTPUT_TOKENS,
           },
         };
         this.dataChannel.send(JSON.stringify(welcomeEvent));
@@ -218,15 +246,15 @@ class RealtimeDemo {
       }
 
       // Set instructions for the voice assistant
-      // This becomes the default instructions for the voice assistant.
-      // You can override this by sending a new `session.update` event.
-      // @link https://platform.openai.com/docs/api-reference/realtime-client-events/session
       const setIntructions = {
         type: "session.update",
         session: {
-          instructions: DEFAULT_INSTRUCTIONS,
-          turn_detection: TURN_DETECTION, // Set to 'false' to turn off VAD
-          max_response_output_tokens: MAX_OUTPUT_TOKENS,
+          instructions: CONFIG.DEFAULTS.DEFAULT_INSTRUCTIONS,
+          turn_detection: CONFIG.API.TURN_DETECTION,
+          max_response_output_tokens: CONFIG.API.MAX_OUTPUT_TOKENS,
+          input_audio_transcription: {
+            model: "whisper-1",
+          },
         },
       };
       this.dataChannel.send(JSON.stringify(setIntructions));
@@ -240,49 +268,67 @@ class RealtimeDemo {
     this.dataChannel.onmessage = (event) => {
       const realtimeEvent = JSON.parse(event.data);
       console.log("Received event:", realtimeEvent);
-    };
-  }
 
-  /**
-   * Authentication
-   * Request an ephemeral API key from the custom auth server.
-   * This approach ensures the OpenAI API key is not exposed to the client.
-   *
-   * The MODEL and VOICE are defined by the auth server through this request.
-   *
-   * @returns {Promise<string>} The ephemeral API key for OpenAI authentication
-   * @throws {Error} If the server request fails
-   */
-  async getEphemeralKey() {
-    try {
-      const response = await fetch(`${SERVER_URL}/session`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: MODEL,
-          voice: VOICE,
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to get session key");
+      // Speech started
+      if (realtimeEvent.type === "input_audio_buffer.speech_started") {
+        this.chatUI.addMessage("Speaking...", "user");
+        this.updateStatus("User speaking");
+      }
+      // Speech stopped
+      else if (realtimeEvent.type === "input_audio_buffer.speech_stopped") {
+        this.updateStatus("Speech stopped");
+      }
+      // Audio buffer committed
+      else if (realtimeEvent.type === "input_audio_buffer.committed") {
+        this.chatUI.updateLastMessage("Processing speech...", "user");
+        this.updateStatus("Processing speech...");
+      }
+      // Partial transcription
+      else if (
+        realtimeEvent.type === "conversation.item.input_audio_transcription"
+      ) {
+        const partialText =
+          realtimeEvent.transcript ??
+          realtimeEvent.text ??
+          "User is speaking...";
+        this.chatUI.updateLastMessage(partialText, "user");
+      }
+      // Final transcription
+      else if (
+        realtimeEvent.type ===
+        "conversation.item.input_audio_transcription.completed"
+      ) {
+        if (realtimeEvent.transcript) {
+          // Replace the last "in progress" message with the final transcript
+          this.chatUI.updateLastMessage(realtimeEvent.transcript, "user");
+          this.updateStatus("Connected");
+        }
+      }
+      // AI response transcript
+      else if (realtimeEvent.type === "response.audio_transcript.done") {
+        if (realtimeEvent.transcript) {
+          this.chatUI.addMessage(realtimeEvent.transcript, "ai");
+        }
       }
 
-      const data = await response.json();
-      return data.client_secret.value;
-    } catch (error) {
-      console.error("Error getting session key:", error);
-      throw error;
-    }
+      // Display text response
+      else if (realtimeEvent.type === "response.done") {
+        console.log("Received text response:", realtimeEvent);
+        if (realtimeEvent.response?.output) {
+          const textResponse =
+            realtimeEvent.response.output[0]?.content[0]?.text;
+          if (textResponse) {
+            this.chatUI.addMessage(textResponse, "ai");
+          }
+        }
+      }
+    };
   }
 
   /**
    * WebRTC Setup
    * Create and configure the WebRTC peer connection with the API.
-   * - Set up basic audio playback for the AI
+   * - Set up audio playback for the AI with visualization
    * - Create a data channel for control messages
    * - Establish a connection using SDP offer/answer
    *
@@ -290,36 +336,29 @@ class RealtimeDemo {
    * @throws {Error} If WebRTC setup fails
    */
   async setupWebRTC(token) {
-    // Step 1: Create peer connection
     this.peerConnection = new RTCPeerConnection({
-      // Use Google's STUN server for NAT traversal
-      // @link https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Protocols
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
 
-    // Step 2: Set up incoming audio
+    // Set up incoming audio with visualizer
     await this.setupIncomingAudio();
 
-    // Step 3: Create data channel for control messages
+    // Create data channel for control messages
     this.dataChannel = this.peerConnection.createDataChannel("oai-events");
-
-    // Step 4: Set up data channel handlers
     this.setupDataChannelHandlers();
 
     try {
-      // Step 5: Get microphone access from the browser
+      // Get microphone access and set up visualizer
       await this.setupMicrophone();
 
-      // Step 6: Create a peer connection offer
       const offer = await this.peerConnection.createOffer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: false,
       });
       await this.peerConnection.setLocalDescription(offer);
 
-      // Step 7: Send the offer to the API
       const response = await fetch(
-        `https://api.openai.com/v1/realtime?model=${MODEL}`,
+        `${CONFIG.API.BASE_URL}?model=${CONFIG.API.MODEL}`,
         {
           method: "POST",
           headers: {
@@ -330,15 +369,12 @@ class RealtimeDemo {
         }
       );
 
-      // Step 8: Check the response from the API
       if (!response.ok) {
         throw new Error(
           `Failed to connect: ${response.status} ${response.statusText}`
         );
       }
 
-      // Step 9: Parse the SDP answer from the API
-      // This is when we know the API has accepted the offer and a connection is established.
       const answer = {
         type: "answer",
         sdp: await response.text(),
@@ -353,25 +389,19 @@ class RealtimeDemo {
 
   /**
    * The Connection Button
-   * - "Create Connection" state: Get ephemeral key, set up WebRTC, enable mic control.
-   * - "Close Connection" state: Clean up and reset all resources.
+   * - "Create Session" state: Get ephemeral key, set up WebRTC, enable mic control.
+   * - "Close Session" state: Clean up and reset all resources.
    */
-  async toggleConnection() {
+  async toggleSession() {
     if (!this.isConnected) {
       try {
         this.updateStatus("Connecting...");
-
-        // Get the ephemeral key from the auth server
-        const token = await this.getEphemeralKey();
-
-        // Set up WebRTC connection
+        const token = await getEphemeralKey();
         await this.setupWebRTC(token);
-
-        // Enable mic control
         this.isConnected = true;
         this.micButton.disabled = false;
-        this.micButton.textContent = "Mute Mic"; // Start with mic enabled
-        this.connectionButton.textContent = "Close Connection";
+        this.micButton.textContent = "Mute Mic";
+        this.connectionButton.textContent = "Close Session";
         this.updateStatus("Connected");
       } catch (error) {
         this.updateStatus("Connection failed: " + error.message);
@@ -386,7 +416,7 @@ class RealtimeDemo {
    * Mute/Unmute Button
    * Enables/disables the microphone input stream
    */
-  toggleMic() {
+  toggleTalk() {
     if (this.mediaStream) {
       this.isTalking = !this.isTalking;
       const audioTrack = this.mediaStream.getAudioTracks()[0];
@@ -401,7 +431,7 @@ class RealtimeDemo {
   }
 }
 
-// Initialize RealtimeDemo when the DOM is loaded
+// Initialize when DOM is loaded
 document.addEventListener("DOMContentLoaded", () => {
   new RealtimeDemo();
 });
