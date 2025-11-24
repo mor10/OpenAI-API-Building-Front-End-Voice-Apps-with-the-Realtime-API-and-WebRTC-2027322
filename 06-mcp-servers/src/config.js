@@ -15,7 +15,6 @@ export const CONFIG = {
       silence_duration_ms: 700, // Default: 500
       create_response: true, // Default: true. False creates no response.
     },
-    MAX_OUTPUT_TOKENS: 200,
     SERVER_URL: SERVER_URL,
   },
   DEFAULTS: {

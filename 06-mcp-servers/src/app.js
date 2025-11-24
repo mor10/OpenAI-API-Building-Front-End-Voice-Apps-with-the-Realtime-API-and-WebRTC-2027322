@@ -269,7 +269,6 @@ class RealtimeDemo {
           input_audio_transcription: {
             model: "whisper-1",
           },
-          max_output_tokens: CONFIG.API.MAX_OUTPUT_TOKENS,
           tools: mcp_servers, // Access available MCP servers
         },
       };
