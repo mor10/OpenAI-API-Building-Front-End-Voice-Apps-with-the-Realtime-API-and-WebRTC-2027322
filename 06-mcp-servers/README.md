@@ -5,6 +5,7 @@ The most advanced demo in the series, adding OpenAI's function calling capabilit
 The demo uses the free [Open-Meteo](https://open-meteo.com/) weather API to retrieve current weather data..
 
 Key enhancements from previous demos:
+
 - Integration with OpenAI's function calling
 - Real-world API interactions for current weather data
 - Structured data handling in conversations
@@ -33,9 +34,9 @@ NOTE: This demo authenticates API requests using an ephemeral key. The key is ob
 ## Configuration
 
 Edit `src/config.js` to modify:
+
 - API endpoints
 - Voice settings
 - Server URL
 - Default instructions
 - Available functions and tools
-

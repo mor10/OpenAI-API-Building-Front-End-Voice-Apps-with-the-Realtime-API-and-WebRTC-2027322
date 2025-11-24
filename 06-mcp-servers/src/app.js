@@ -18,10 +18,12 @@ import { CONFIG } from "./config.js";
 import { createVisualizer } from "./visualizer.js";
 import { getEphemeralKey } from "./auth-api.js";
 import { ChatUI } from "./chat.js";
+import { sendDataToAPI, getBrowserLocation } from "./tools/utils.js";
+import { mcp_servers } from "./tools/mcp-servers.js";
 
 /**
  * RealtimeDemo Class
- * Manages voice and text interactions with the Realtime API.
+ * Manages voice, text, and function calling interactions with the Realtime API.
  */
 class RealtimeDemo {
   constructor() {
@@ -36,6 +38,11 @@ class RealtimeDemo {
     this.micVisualizer = null;
     this.aiVisualizer = null;
     this.chatUI = null;
+    this.currentTranscript = "";
+    this.accumulatedTranscript = "";
+    this.isCapturingVoice = false;
+    this.lastSpeechTime = 0;
+    this.speechTimeoutId = null;
 
     // Get DOM elements
     this.connectionButton = document.getElementById("connection-button");
@@ -107,7 +114,7 @@ class RealtimeDemo {
 
   /**
    * Text Chat Handler
-   * Processes text messages and requests text-only responses.
+   * Processes text messages and requests text-only responses with function calling.
    * Messages sent via text receive text-only responses.
    *
    * @param {string} message - The message to send to the API
@@ -132,7 +139,6 @@ class RealtimeDemo {
         ],
       },
     };
-    console.log("Sending text-only message:", messageEvent);
     this.dataChannel.send(JSON.stringify(messageEvent));
 
     // Request a text-only response using the same instructions as voice
@@ -141,6 +147,7 @@ class RealtimeDemo {
       response: {
         modalities: ["text"], // API returns only text
         instructions: CONFIG.DEFAULTS.DEFAULT_INSTRUCTIONS,
+        tools: mcp_servers, // Access available MCP servers
       },
     };
     console.log("Requesting text-only response:", textResponseEvent);
@@ -156,35 +163,23 @@ class RealtimeDemo {
    */
   async setupIncomingAudio() {
     try {
+      this.mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: false,
+      });
+
       // Initialize visualizer
-      const aiVisualizer = createVisualizer();
+      this.micVisualizer = createVisualizer("micVisualizer");
+      if (this.micVisualizer.init(null, this.mediaStream)) {
+        console.log("User Visualizer started successfully");
+      }
 
-      // Set up audio element
-      this.audioElement = document.createElement("audio");
-      this.audioElement.autoplay = true;
-      document.body.appendChild(this.audioElement);
-
-      // Set up to play remote audio from the API
-      this.peerConnection.ontrack = (event) => {
-        console.log("Received remote track:", event.track.kind);
-        this.audioElement.srcObject = event.streams[0];
-        this.audioElement.addEventListener(
-          "canplay",
-          () => {
-            console.log("Audio is ready to play");
-            this.aiVisualizer = aiVisualizer;
-            if (this.aiVisualizer.init(this.audioElement, event.streams[0])) {
-              console.log("Visualizer started successfully");
-            }
-            this.audioElement
-              .play()
-              .catch((e) => console.error("Error playing audio:", e));
-          },
-          { once: true }
-        );
-      };
+      const audioTrack = this.mediaStream.getAudioTracks()[0];
+      audioTrack.enabled = true;
+      this.peerConnection.addTrack(audioTrack, this.mediaStream);
+      console.log("Microphone setup complete");
     } catch (error) {
-      this.updateStatus("Error setting up incoming audio: " + error.message);
+      this.updateStatus("Error accessing microphone: " + error.message);
       throw error;
     }
   }
@@ -224,12 +219,15 @@ class RealtimeDemo {
    * Monitor the data channel for events:
    * - onopen: Send initial greeting, set instructions for the voice assistant
    * - onclose: Update connection status
-   * - onmessage: Process incoming messages from the API, including text responses
+   * - onmessage: Process incoming messages from the API, including calls to MCP servers
    */
   setupDataChannelHandlers() {
     this.dataChannel.onopen = () => {
       console.log("Data channel opened");
       this.updateStatus("Connected to Realtime API");
+
+      // Pass the data channel to the weather service
+      // setDataChannel(this.dataChannel);
 
       if (!this.hasWelcomed) {
         console.log("Sending welcome message");
@@ -238,7 +236,6 @@ class RealtimeDemo {
           response: {
             modalities: ["audio", "text"],
             instructions: CONFIG.DEFAULTS.WELCOME_INSTRUCTIONS,
-            max_output_tokens: CONFIG.API.MAX_OUTPUT_TOKENS,
           },
         };
         this.dataChannel.send(JSON.stringify(welcomeEvent));
@@ -251,10 +248,11 @@ class RealtimeDemo {
         session: {
           instructions: CONFIG.DEFAULTS.DEFAULT_INSTRUCTIONS,
           turn_detection: CONFIG.API.TURN_DETECTION,
-          max_response_output_tokens: CONFIG.API.MAX_OUTPUT_TOKENS,
           input_audio_transcription: {
             model: "whisper-1",
           },
+          max_output_tokens: CONFIG.API.MAX_OUTPUT_TOKENS,
+          tools: mcp_servers, // Access available MCP servers
         },
       };
       this.dataChannel.send(JSON.stringify(setIntructions));
@@ -310,15 +308,27 @@ class RealtimeDemo {
           this.chatUI.addMessage(realtimeEvent.transcript, "ai");
         }
       }
-
-      // Display text response
+      // Handle text and function call responses
       else if (realtimeEvent.type === "response.done") {
-        console.log("Received text response:", realtimeEvent);
+        console.log("Text response object:", realtimeEvent.response);
         if (realtimeEvent.response?.output) {
-          const textResponse =
-            realtimeEvent.response.output[0]?.content[0]?.text;
-          if (textResponse) {
-            this.chatUI.addMessage(textResponse, "ai");
+          // Process each output item
+          for (const item of realtimeEvent.response.output) {
+            if (item.type === "message" && item.content?.[0]?.text) {
+              // Handle text response
+              this.chatUI.addMessage(item.content[0].text, "ai");
+            } else if (item.type === "function_call") {
+              // Handle function call
+              const functionName = item.name;
+              const args = JSON.parse(item.arguments);
+              console.log(`Function call: ${functionName}`, args);
+              // Execute the function call through the tools system
+              if (functionName === "getWeatherData") {
+                getWeatherData(args.lat, args.lon, args.locationName);
+              } else if (functionName === "getBrowserLocationWeatherData") {
+                getBrowserLocationWeatherData();
+              }
+            }
           }
         }
       }
@@ -340,15 +350,40 @@ class RealtimeDemo {
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
 
-    // Set up incoming audio with visualizer
-    await this.setupIncomingAudio();
+    // Initialize visualizer
+    const aiVisualizer = createVisualizer();
 
-    // Create data channel for control messages
+    // Set up audio playback
+    this.audioElement = document.createElement("audio");
+    this.audioElement.autoplay = true;
+    document.body.appendChild(this.audioElement);
+
+    // Handle remote audio track
+    this.peerConnection.ontrack = (event) => {
+      console.log("Received remote track:", event.track.kind);
+      this.audioElement.srcObject = event.streams[0];
+      this.audioElement.addEventListener(
+        "canplay",
+        () => {
+          console.log("Audio is ready to play");
+          this.aiVisualizer = aiVisualizer;
+          if (this.aiVisualizer.init(this.audioElement, event.streams[0])) {
+            console.log("Visualizer started successfully");
+          }
+          this.audioElement
+            .play()
+            .catch((e) => console.error("Error playing audio:", e));
+        },
+        { once: true }
+      );
+    };
+
+    // Set up data channel
     this.dataChannel = this.peerConnection.createDataChannel("oai-events");
     this.setupDataChannelHandlers();
 
     try {
-      // Get microphone access and set up visualizer
+      // Set up microphone with visualizer
       await this.setupMicrophone();
 
       const offer = await this.peerConnection.createOffer({
