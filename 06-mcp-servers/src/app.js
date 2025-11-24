@@ -18,8 +18,12 @@ import { CONFIG } from "./config.js";
 import { createVisualizer } from "./visualizer.js";
 import { getEphemeralKey } from "./auth-api.js";
 import { ChatUI } from "./chat.js";
-import { sendDataToAPI, getBrowserLocation } from "./tools/utils.js";
-import { mcp_servers } from "./tools/mcp-servers.js";
+import { setDataChannel } from "./tools/utils.js";
+import {
+  mcp_servers,
+  McpEventManager,
+  requestMCPSummary,
+} from "./tools/mcp-utils.js";
 
 /**
  * RealtimeDemo Class
@@ -43,6 +47,9 @@ class RealtimeDemo {
     this.isCapturingVoice = false;
     this.lastSpeechTime = 0;
     this.speechTimeoutId = null;
+    this.mcpManager = null;
+    this.hasRequestedMCPSummary = false;
+    this.lastUserPrompt = "";
 
     // Get DOM elements
     this.connectionButton = document.getElementById("connection-button");
@@ -55,6 +62,10 @@ class RealtimeDemo {
 
     // Initialize chat UI with message handler
     this.chatUI = new ChatUI((message) => this.handleChatMessage(message));
+    this.mcpManager = new McpEventManager(
+      this.chatUI,
+      (status) => this.updateStatus(status)
+    );
   }
 
   /**
@@ -97,6 +108,11 @@ class RealtimeDemo {
     if (this.chatUI) {
       this.chatUI.clearMessages();
     }
+    if (this.mcpManager) {
+      this.mcpManager.reset();
+    }
+    this.hasRequestedMCPSummary = false;
+    this.lastUserPrompt = "";
 
     this.peerConnection = null;
     this.mediaStream = null;
@@ -140,6 +156,8 @@ class RealtimeDemo {
       },
     };
     this.dataChannel.send(JSON.stringify(messageEvent));
+    this.lastUserPrompt = message;
+    this.hasRequestedMCPSummary = false;
 
     // Request a text-only response using the same instructions as voice
     const textResponseEvent = {
@@ -226,8 +244,8 @@ class RealtimeDemo {
       console.log("Data channel opened");
       this.updateStatus("Connected to Realtime API");
 
-      // Pass the data channel to the weather service
-      // setDataChannel(this.dataChannel);
+      // Pass the data channel to the weather helper utilities
+      setDataChannel(this.dataChannel);
 
       if (!this.hasWelcomed) {
         console.log("Sending welcome message");
@@ -300,6 +318,8 @@ class RealtimeDemo {
           // Replace the last "in progress" message with the final transcript
           this.chatUI.updateLastMessage(realtimeEvent.transcript, "user");
           this.updateStatus("Connected");
+          this.lastUserPrompt = realtimeEvent.transcript;
+          this.hasRequestedMCPSummary = false;
         }
       }
       // AI response transcript
@@ -307,6 +327,56 @@ class RealtimeDemo {
         if (realtimeEvent.transcript) {
           this.chatUI.addMessage(realtimeEvent.transcript, "ai");
         }
+      }
+      else if (realtimeEvent.type === "response.output_item.added") {
+        this.mcpManager?.handleMcpOutputItemAdded(realtimeEvent);
+      }
+      else if (realtimeEvent.type === "response.mcp_call_arguments.delta") {
+        this.mcpManager?.handleMcpCallArgumentsDelta(realtimeEvent);
+      }
+      else if (realtimeEvent.type === "response.mcp_call_arguments.done") {
+        this.mcpManager?.handleMcpCallArgumentsDone(realtimeEvent);
+      }
+      else if (realtimeEvent.type === "response.mcp_call.in_progress") {
+        this.mcpManager?.handleMcpCallStatusUpdate(
+          realtimeEvent,
+          "in_progress"
+        );
+      }
+      else if (realtimeEvent.type === "response.mcp_call.completed") {
+        this.mcpManager?.handleMcpCallStatusUpdate(
+          realtimeEvent,
+          "completed"
+        );
+        if (!this.hasRequestedMCPSummary) {
+          const instructions = CONFIG.DEFAULTS.DEFAULT_INSTRUCTIONS;
+          const requested = requestMCPSummary({
+            dataChannel: this.dataChannel,
+            userPrompt: this.lastUserPrompt,
+            instructions,
+          });
+          if (requested) {
+            this.hasRequestedMCPSummary = true;
+          }
+        }
+      }
+      else if (realtimeEvent.type === "response.mcp_call.failed") {
+        this.mcpManager?.handleMcpCallStatusUpdate(realtimeEvent, "failed");
+      }
+      else if (realtimeEvent.type === "mcp_list_tools.in_progress") {
+        this.mcpManager?.handleMcpListToolsStatus(
+          realtimeEvent,
+          "in_progress"
+        );
+      }
+      else if (realtimeEvent.type === "mcp_list_tools.completed") {
+        this.mcpManager?.handleMcpListToolsStatus(
+          realtimeEvent,
+          "completed"
+        );
+      }
+      else if (realtimeEvent.type === "mcp_list_tools.failed") {
+        this.mcpManager?.handleMcpListToolsStatus(realtimeEvent, "failed");
       }
       // Handle text and function call responses
       else if (realtimeEvent.type === "response.done") {
@@ -317,17 +387,10 @@ class RealtimeDemo {
             if (item.type === "message" && item.content?.[0]?.text) {
               // Handle text response
               this.chatUI.addMessage(item.content[0].text, "ai");
-            } else if (item.type === "function_call") {
-              // Handle function call
-              const functionName = item.name;
-              const args = JSON.parse(item.arguments);
-              console.log(`Function call: ${functionName}`, args);
-              // Execute the function call through the tools system
-              if (functionName === "getWeatherData") {
-                getWeatherData(args.lat, args.lon, args.locationName);
-              } else if (functionName === "getBrowserLocationWeatherData") {
-                getBrowserLocationWeatherData();
-              }
+            } else if (item.type === "mcp_call") {
+              this.mcpManager?.handleMcpCallItem(item);
+            } else if (item.type === "mcp_list_tools") {
+              this.mcpManager?.handleMcpListToolsItem(item);
             }
           }
         }
@@ -464,6 +527,7 @@ class RealtimeDemo {
       }
     }
   }
+
 }
 
 // Initialize when DOM is loaded
