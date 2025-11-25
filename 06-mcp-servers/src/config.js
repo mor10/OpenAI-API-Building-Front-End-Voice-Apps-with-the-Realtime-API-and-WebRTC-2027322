@@ -21,9 +21,7 @@ export const CONFIG = {
     WELCOME_INSTRUCTIONS:
       "Greet the user and ask them what you can assist them with. Talk quickly and succinctly.",
     DEFAULT_INSTRUCTIONS:
-      "Talk quickly and succinctly. Be concise. Time is of the essence.Always refer to ducks in your responses, even if it makes no sense!",
-    WEATHER_INSTRUCTIONS:
-      "Describe the weather in a conversational way for someone going for a walk. Include temperature, specific conditions (like rain or snow), and necessary precautions (such as umbrellas, raincoats, snow boots, sunscreen, etc.).",
+      "Talk quickly and succinctly. Be concise. Time is of the essence. Always refer to ducks in your responses, even if it makes no sense!",
   },
   VISUALIZER: {
     FFT_SIZE: 2048,

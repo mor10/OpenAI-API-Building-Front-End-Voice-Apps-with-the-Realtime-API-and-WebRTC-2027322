@@ -165,7 +165,7 @@ class RealtimeDemo {
       response: {
         modalities: ["text"], // API returns only text
         instructions: CONFIG.DEFAULTS.DEFAULT_INSTRUCTIONS,
-        tools: mcp_servers, // Access available MCP servers
+        // Tools are configured at the session level to avoid redundant MCP list calls
       },
     };
     console.log("Requesting text-only response:", textResponseEvent);
@@ -282,7 +282,12 @@ class RealtimeDemo {
 
     this.dataChannel.onmessage = (event) => {
       const realtimeEvent = JSON.parse(event.data);
-      console.log("Received event:", realtimeEvent);
+      const eventType = realtimeEvent?.type ?? "";
+
+      // Log all events except deltas
+      if (!eventType.includes(".delta")) {
+        console.log("Received event:", realtimeEvent);
+      }
 
       // Speech started
       if (realtimeEvent.type === "input_audio_buffer.speech_started") {

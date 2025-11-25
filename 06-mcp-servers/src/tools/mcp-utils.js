@@ -382,8 +382,8 @@ function requestMCPSummary(options = {}) {
   const promptText =
     typeof summaryTemplate === "function"
       ? summaryTemplate(trimmedPrompt)
-      : summaryTemplate?.replaceAll("{prompt}", trimmedPrompt) ??
-      `Please provide a concise spoken and written summary using the MCP tools for the user's request: "${trimmedPrompt}".`;
+      : summaryTemplate?.replaceAll("{prompt}", trimmedPrompt) 
+      ?? trimmedPrompt;
 
   const messageEvent = {
     type: "conversation.item.create",
