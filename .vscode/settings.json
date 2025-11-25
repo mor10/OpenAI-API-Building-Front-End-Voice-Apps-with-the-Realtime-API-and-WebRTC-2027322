@@ -7,6 +7,7 @@
   "editor.formatOnPaste": true,
   "editor.formatOnSave": true,
   "editor.lineNumbers": "on",
+  "editor.wordWrap": "bounded",
   "editor.matchBrackets": "always",
   "editor.minimap.enabled": false,
   "editor.smoothScrolling": true,
