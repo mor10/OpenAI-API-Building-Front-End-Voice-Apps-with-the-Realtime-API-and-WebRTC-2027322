@@ -50,6 +50,7 @@ class RealtimeDemo {
     this.mcpManager = null;
     this.hasRequestedMCPSummary = false;
     this.lastUserPrompt = "";
+    this.lastUserModalities = ["audio", "text"];
 
     // Get DOM elements
     this.connectionButton = document.getElementById("connection-button");
@@ -113,6 +114,7 @@ class RealtimeDemo {
     }
     this.hasRequestedMCPSummary = false;
     this.lastUserPrompt = "";
+    this.lastUserModalities = ["audio", "text"];
 
     this.peerConnection = null;
     this.mediaStream = null;
@@ -157,6 +159,7 @@ class RealtimeDemo {
     };
     this.dataChannel.send(JSON.stringify(messageEvent));
     this.lastUserPrompt = message;
+    this.lastUserModalities = ["text"];
     this.hasRequestedMCPSummary = false;
 
     // Request a text-only response using the same instructions as voice
@@ -282,10 +285,13 @@ class RealtimeDemo {
 
     this.dataChannel.onmessage = (event) => {
       const realtimeEvent = JSON.parse(event.data);
-      const eventType = realtimeEvent?.type ?? "";
+      const eventType = typeof realtimeEvent?.type === "string"
+        ? realtimeEvent.type.trim()
+        : "";
 
-      // Log all events except deltas
-      if (!eventType.includes(".delta")) {
+      // Log all events except deltas (e.g., response.audio_transcript.delta)
+      const isDeltaEvent = eventType.endsWith(".delta");
+      if (!isDeltaEvent) {
         console.log("Received event:", realtimeEvent);
       }
 
@@ -323,6 +329,7 @@ class RealtimeDemo {
           this.chatUI.updateLastMessage(realtimeEvent.transcript, "user");
           this.updateStatus("Connected");
           this.lastUserPrompt = realtimeEvent.transcript;
+          this.lastUserModalities = ["audio", "text"];
           this.hasRequestedMCPSummary = false;
         }
       }
@@ -352,12 +359,14 @@ class RealtimeDemo {
           realtimeEvent,
           "completed"
         );
+
         if (!this.hasRequestedMCPSummary) {
           const instructions = CONFIG.DEFAULTS.DEFAULT_INSTRUCTIONS;
           const requested = requestMCPSummary({
             dataChannel: this.dataChannel,
             userPrompt: this.lastUserPrompt,
             instructions,
+            modalities: this.lastUserModalities ?? ["audio", "text"],
           });
           if (requested) {
             this.hasRequestedMCPSummary = true;
@@ -382,7 +391,7 @@ class RealtimeDemo {
       else if (realtimeEvent.type === "mcp_list_tools.failed") {
         this.mcpManager?.handleMcpListToolsStatus(realtimeEvent, "failed");
       }
-      // Handle text and function call responses
+      // Handle text and MCP responses
       else if (realtimeEvent.type === "response.done") {
         console.log("Text response object:", realtimeEvent.response);
         if (realtimeEvent.response?.output) {

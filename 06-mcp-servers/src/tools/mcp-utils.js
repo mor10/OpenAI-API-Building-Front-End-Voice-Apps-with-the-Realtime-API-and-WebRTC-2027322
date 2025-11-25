@@ -382,7 +382,7 @@ function requestMCPSummary(options = {}) {
   const promptText =
     typeof summaryTemplate === "function"
       ? summaryTemplate(trimmedPrompt)
-      : summaryTemplate?.replaceAll("{prompt}", trimmedPrompt) 
+      : summaryTemplate?.replaceAll("{prompt}", trimmedPrompt)
       ?? trimmedPrompt;
 
   const messageEvent = {
