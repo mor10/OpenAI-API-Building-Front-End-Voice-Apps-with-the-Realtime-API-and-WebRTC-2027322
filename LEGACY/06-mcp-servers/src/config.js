@@ -1,7 +1,7 @@
 /**
  * App configuration
  */
-import { SERVER_URL } from "../../server-config.js";
+import { SERVER_URL } from "../../../server-config.js";
 
 export const CONFIG = {
   API: {
