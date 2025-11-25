@@ -50,6 +50,11 @@ class McpEventManager {
         this.notifyStatus(`Preparing ${this.buildMcpCallLabel(callState)}`);
         callState.announced = true;
       }
+      this.announceCallStage(
+        callState,
+        "preparing",
+        `[MCP] Preparing ${this.buildMcpCallLabel(callState)}`
+      );
 
       console.log("MCP tool call added:", {
         itemId: callState.id,
@@ -116,6 +121,12 @@ class McpEventManager {
         callState.argumentsAnnounced = true;
       }
     }
+
+    this.announceCallStage(
+      callState,
+      "waiting",
+      `[MCP] Waiting for response from ${label}`
+    );
   }
 
   handleMcpCallStatusUpdate(realtimeEvent, status) {
@@ -125,8 +136,14 @@ class McpEventManager {
 
     if (status === "in_progress") {
       this.notifyStatus(`Running ${label}`);
+      this.announceCallStage(callState, "using", `[MCP] Using ${label}`);
     } else if (status === "completed") {
       this.notifyStatus(`${label} completed`);
+      this.announceCallStage(
+        callState,
+        "completed",
+        `[MCP] ${label} response received`
+      );
     } else if (status === "failed") {
       this.notifyStatus(`${label} failed`);
       if (!callState.failureAnnounced) {
@@ -135,6 +152,11 @@ class McpEventManager {
         );
         callState.failureAnnounced = true;
       }
+      this.announceCallStage(
+        callState,
+        "failed",
+        `[MCP] ${label} failed`
+      );
     }
 
     console.log("MCP call status update:", {
@@ -152,9 +174,27 @@ class McpEventManager {
 
     if (status === "completed") {
       this.notifyStatus(`MCP tools ready${suffix}`);
-    } else if (status === "failed" && !listState.failureAnnounced) {
-      this.postAiMessage(`[MCP] Tool discovery${suffix} failed.`);
-      listState.failureAnnounced = true;
+      this.announceListStage(
+        listState,
+        "ready",
+        `[MCP] MCP tools ready${suffix}`
+      );
+    } else if (status === "failed") {
+      if (!listState.failureAnnounced) {
+        this.postAiMessage(`[MCP] Tool discovery${suffix} failed.`);
+        listState.failureAnnounced = true;
+      }
+      this.announceListStage(
+        listState,
+        "failed",
+        `[MCP] Tool discovery${suffix} failed`
+      );
+    } else if (status === "in_progress") {
+      this.announceListStage(
+        listState,
+        "looking",
+        `[MCP] Looking for MCP tools${suffix}`
+      );
     }
 
     console.log("MCP tool list status update:", {
@@ -253,6 +293,7 @@ class McpEventManager {
         obfuscated: false,
         error: null,
         announced: false,
+        stageAnnouncements: new Set(),
       };
     }
 
@@ -274,6 +315,7 @@ class McpEventManager {
         obfuscated: false,
         error: null,
         announced: false,
+        stageAnnouncements: new Set(),
       });
     }
 
@@ -289,6 +331,7 @@ class McpEventManager {
         responseId: null,
         announced: false,
         failureAnnounced: false,
+        stageAnnouncements: new Set(),
       };
     }
 
@@ -300,6 +343,7 @@ class McpEventManager {
         responseId: null,
         announced: false,
         failureAnnounced: false,
+        stageAnnouncements: new Set(),
       });
     }
 
@@ -346,15 +390,41 @@ class McpEventManager {
     return callState.serverLabel ? `${base} (${callState.serverLabel})` : base;
   }
 
+  announceCallStage(callState, stage, message) {
+    if (!callState || !stage || !message) {
+      return;
+    }
+    if (!callState.stageAnnouncements) {
+      callState.stageAnnouncements = new Set();
+    }
+    if (!callState.stageAnnouncements.has(stage)) {
+      this.postAiMessage(message, "status");
+      callState.stageAnnouncements.add(stage);
+    }
+  }
+
+  announceListStage(listState, stage, message) {
+    if (!listState || !stage || !message) {
+      return;
+    }
+    if (!listState.stageAnnouncements) {
+      listState.stageAnnouncements = new Set();
+    }
+    if (!listState.stageAnnouncements.has(stage)) {
+      this.postAiMessage(message, "status");
+      listState.stageAnnouncements.add(stage);
+    }
+  }
+
   notifyStatus(message) {
     if (this.statusUpdater) {
       this.statusUpdater(message);
     }
   }
 
-  postAiMessage(content) {
+  postAiMessage(content, sender = "ai") {
     if (this.chatUI) {
-      this.chatUI.addMessage(content, "ai");
+      this.chatUI.addMessage(content, sender);
     }
   }
 }
