@@ -13,6 +13,15 @@
  */
 import express from "express";
 import cors from "cors";
+import dotenv from "dotenv";
+
+// Load environment variables from .env
+dotenv.config();
+const apiKey = process.env.OPENAI_API_KEY;
+if (!apiKey) {
+  console.error("Error: OPENAI_API_KEY is not set in environment variables.");
+  process.exit(1);
+}
 
 const app = express();
 
@@ -48,11 +57,11 @@ app.get("/token", async (req, res) => {
 
   try {
     const response = await fetch(
-      "https://api.openai.com/v1/realtime/sessions",
+      "https://api.openai.com/v1/realtime/client_secrets",
       {
         method: "POST",
         headers: {
-          Authorization: "Bearer " + process.env.OPENAI_API_KEY,
+          Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
         body: sessionConfig,
