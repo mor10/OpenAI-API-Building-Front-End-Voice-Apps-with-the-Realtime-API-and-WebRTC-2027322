@@ -1,41 +1,10 @@
 "use server";
 
 export async function getToken() {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("Missing OPENAI_API_KEY environment variable.");
-  }
 
-  const response = await fetch(
-    "https://api.openai.com/v1/realtime/client_secrets",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        session: {
-          type: "realtime",
-          model: "gpt-realtime",
-          tools: [
-            {
-              type: "mcp",
-              server_label: "deepwiki",
-              server_url: "https://mcp.deepwiki.com/sse",
-              require_approval: "always",
-            },
-            {
-              type: "mcp",
-              server_label: "dnd",
-              server_url: "https://dmcp-server.deno.dev/sse",
-              require_approval: "always",
-            },
-          ],
-        },
-      }),
-    }
-  );
+  const response = await fetch("http://localhost:3000/token", {
+    
+  });
 
   if (!response.ok) {
     let detail = "";
