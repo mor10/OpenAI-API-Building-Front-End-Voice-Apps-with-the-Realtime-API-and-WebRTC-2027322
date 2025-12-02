@@ -17,7 +17,7 @@
   // Install dependencies for the auth-server
   "postCreateCommand": "cd auth-server && npm install && curl -LsSf https://astral.sh/uv/install.sh | sh",
   // Forward port for the auth-server and make it public
-  "forwardPorts": [3000, 8000, 9307],
+  "forwardPorts": [3000, 8000, 9307, 9308],
   "portsAttributes": {
     "3000": {
       "label": "auth-server"
@@ -26,7 +26,10 @@
       "label": "mcp-server"
     },
     "9307": {
-      "label": "voice-app"
+      "label": "project-complete-live-server"
+    },
+    "9308": {
+      "label": "project-baseline-live-server"
     }
   }
 }

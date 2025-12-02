@@ -14,8 +14,7 @@ export const weatherAgent = new RealtimeAgent({
   tools: [
     hostedMcpTool({
       serverLabel: "openmeteo-weather",
-      serverUrl:
-        "https://orange-bassoon-wr574gx9j6cv5q9-8000.app.github.dev/mcp",
+      serverUrl: "https://<RANDOM-GENERATED-URI>-8000.app.github.dev/mcp",
     }),
   ],
 });

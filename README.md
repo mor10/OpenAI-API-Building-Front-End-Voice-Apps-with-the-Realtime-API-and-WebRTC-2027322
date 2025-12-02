@@ -48,8 +48,10 @@ node server.js
 ```
 
 4. In Codespaces, go to Ports and set port `3000` to **Public**.
-5. Identify the live URL for the auth server, and it to `server-config.js`.
-6. To stop the auth server, run `Ctrl+C` in the terminal.
+5. Copy the live URL for `auth-server` (e.g., `https://<RANDOM-GENERATED-URI>-3000.app.github.dev`)
+6. In both `/project-baseline/` and `/project-completed/`, copy `.env.local.template` to `.env.local` and set `NEXT_PUBLIC_AUTH_SERVER_URL=` to the `auth-server` URL.
+
+To stop the auth server, run `Ctrl+C` in the terminal.
 
 ## Setting up the MCP Server
 
@@ -62,7 +64,20 @@ The project comes with a simple Python-based MCP server to enable external conne
 3. Start the MCP server using `uv run mcp_open_meteo/server.py`
 4. In Codespaces, go to Ports and set port `8000` to **Public**.
 5. Identify the live URL for the MCP server, and it to `mcp-config.js`.
-6. To stop the MCP server, run `Ctrl+C` in the terminal.
+6. In `/project-complete/agents/weatherAgent.ts`, update the `serverUrl` property with the live URL of your MCP server.
+
+To stop the MCP server, run `Ctrl+C` in the terminal.
+
+## Running the Front-End App
+
+To run the projects in either `/project-baseline/` or `/project-completed/`:
+
+1. Open the folder in terminal
+2. Install the dependencies using `npm install`
+3. Start the development server using `npm run dev`
+4. Open the provided localhost URL in your browser
+
+To test the app on other devices, set the port for the live server to **Public**.
 
 ## Instructor
 
