@@ -16,7 +16,7 @@
   "emmet.triggerExpansionOnTab": true,
   "files.autoSave": "afterDelay",
   "files.exclude": {
-    // "**/.course/**": true
+    "**/.course/**": true
   },
   "search.exclude": {
     "**/.course/**": true
