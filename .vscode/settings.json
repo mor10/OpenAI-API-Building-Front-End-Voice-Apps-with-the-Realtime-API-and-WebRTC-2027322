@@ -15,6 +15,12 @@
   "editor.useTabStops": true,
   "emmet.triggerExpansionOnTab": true,
   "files.autoSave": "afterDelay",
+  "files.exclude": {
+    // "**/.course/**": true
+  },
+  "search.exclude": {
+    "**/.course/**": true
+  },
   "terminal.integrated.fontSize": 18,
   "workbench.colorTheme": "LinkedIn Learning Dark",
   "workbench.fontAliasing": "antialiased",
