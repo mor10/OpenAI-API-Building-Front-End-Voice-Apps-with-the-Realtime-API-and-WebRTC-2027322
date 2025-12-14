@@ -1,11 +1,34 @@
 "use client";
 
+/**
+ * LESSON TASK:
+ *
+ * Import useEffect and useRef from React
+ */
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConnectionPanel } from "@/components/realtime/ConnectionPanel";
+
+/**
+ * LESSON TASK:
+ *
+ * Import REALTIME_DEFAULTS from the useRealtimeAgent hook
+ */
 import { useRealtimeAgent } from "@/lib/useRealtimeAgent";
 
 export function RealtimeChat() {
+  /**
+   * LESSON TASK:
+   *
+   * Create a ref called hasGreetedRef to track if the greeting has been sent
+   */
+
+  /**
+   * LESSON TASK:
+   *
+   * Import sendText from the useRealtimeAgent hook
+   */
   const {
     connect,
     disconnect,
@@ -18,6 +41,18 @@ export function RealtimeChat() {
     error,
     config,
   } = useRealtimeAgent();
+
+  /**
+   * LESSON TASK:
+   *
+   * Use sendText from the useRealtimeAgent hook to send REALTIME_DEFAULTS.greeting to the API
+   * when a connection is established. This will trigger a response in the form of a greeting.
+   *
+   * - Use useEffect to monitor isConnected state
+   * - If isConnected is true and hasGreetedRef is false, send greeting message using sendText
+   * - Set hasGreetedRef to true after sending greeting
+   * - Reset hasGreetedRef to false when disconnected
+   */
 
   const handleConnectToggle = () => {
     if (isConnected) {
