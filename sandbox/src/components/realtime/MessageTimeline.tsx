@@ -10,14 +10,19 @@ export type MessageTimelineProps = {
   events: TransportEvent[];
   isListening: boolean;
   greetingText: string;
+  bannedPhrases: string[];
 };
 
+/**
+ * LESSON TASK:
+ * Extend the DisplayMessage type to include tool_call and function_call messages.
+ */
 export type DisplayMessage = {
   id: string;
   role: string;
   text: string;
   isUser: boolean;
-  eventType?: "message";
+  eventType?: "message" | "guardrail";
 };
 
 export function MessageTimeline({
@@ -25,7 +30,13 @@ export function MessageTimeline({
   events,
   isListening,
   greetingText,
+  bannedPhrases,
 }: MessageTimelineProps) {
+  const normalizedBanned = bannedPhrases.map((phrase) => phrase.toLowerCase());
+  const guardrailTrips = events.filter(
+    (event) => event.type === "guardrail_tripped"
+  );
+
   let displayMessages: DisplayMessage[] = history.map((item, index) => {
     const fallbackId =
       "itemId" in item && typeof item.itemId === "string"
@@ -53,7 +64,10 @@ export function MessageTimeline({
         .filter(Boolean)
         .join("\n");
 
-      const containsBanned = false;
+      const lowerText = text.toLowerCase();
+      const containsBanned =
+        item.role === "assistant" &&
+        normalizedBanned.some((phrase) => lowerText.includes(phrase));
 
       return {
         id: fallbackId,
@@ -63,6 +77,11 @@ export function MessageTimeline({
         eventType: "message",
       };
     }
+
+    /**
+     * LESSON TASK:
+     * Add handling for function_call and tool_call events to display appropriate messages in the timeline.
+     */
 
     return {
       id: fallbackId,
@@ -75,6 +94,38 @@ export function MessageTimeline({
   displayMessages = displayMessages.filter(
     (message) => !(message.isUser && message.text.trim() === greetingText)
   );
+
+  if (guardrailTrips.length > 0) {
+    const latest = guardrailTrips[guardrailTrips.length - 1];
+    const name: string | undefined =
+      ("guardrail" in latest &&
+        (latest as { guardrail?: { name?: string } }).guardrail?.name) ||
+      ("name" in latest && (latest as { name?: string }).name) ||
+      undefined;
+    const outputInfo =
+      ("outputInfo" in latest &&
+        (latest as { outputInfo?: unknown }).outputInfo) ||
+      ("details" in latest && (latest as { details?: unknown }).details) ||
+      undefined;
+    const detailText =
+      typeof outputInfo === "string"
+        ? outputInfo
+        : outputInfo && typeof outputInfo === "object"
+        ? JSON.stringify(outputInfo)
+        : undefined;
+
+    const detailsSuffix = detailText ? ` – ${detailText}` : "";
+
+    displayMessages.push({
+      id: `guardrail-${history.length}-${events.length}`,
+      role: "system",
+      text: name
+        ? `Response blocked by guardrails: ${name}${detailsSuffix}`
+        : "Response blocked by guardrails.",
+      isUser: false,
+      eventType: "guardrail",
+    });
+  }
 
   if (isListening) {
     displayMessages.push({

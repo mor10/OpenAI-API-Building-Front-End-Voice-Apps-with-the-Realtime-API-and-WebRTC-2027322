@@ -2,7 +2,7 @@
 
 ## Info
 
-Current module: module_end
+Current module: module_06
 Title: OpenAI Realtime API: Building Chat Agents with the Realtime API and Agents SDK
 Instructor: Morten Rand-Hendriksen
 Link: https://www.linkedin.com/learning/openai-realtime-api-building-chat-agents-with-the-realtime-api-and-agents-sdk
@@ -15,9 +15,9 @@ Description: Build voice-to-voice, text-to-voice, and image-to-voice AI agents w
 - [x] MODULE 03: Event Log
 - [x] MODULE 04: Text Chat
 - [x] MODULE 05: Guardrails
-- [x] MODULE 06: Tools and Function Calling
-- [x] MODULE 07: MCP Integration
-- [x] MODULE 08: Camera Input
+- [ ] MODULE 06: Tools and Function Calling
+- [ ] MODULE 07: MCP Integration
+- [ ] MODULE 08: Camera Input
 
 # Course reference map
 
