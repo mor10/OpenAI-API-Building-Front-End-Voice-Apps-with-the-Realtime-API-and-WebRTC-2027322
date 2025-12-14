@@ -10,22 +10,72 @@ export type MessageTimelineProps = {
   events: TransportEvent[];
   isListening: boolean;
   greetingText: string;
+  bannedPhrases: string[];
 };
 
+/**
+ * LESSON TASK:
+ * Extend the DisplayMessage type to include
+ * - handoff
+ * - mcp_call
+ * - mcp_tool_call
+ */
 export type DisplayMessage = {
   id: string;
   role: string;
   text: string;
   isUser: boolean;
-  eventType?: "message";
+  eventType?: "message" | "tool_call" | "function_call" | "guardrail";
 };
+
+/**
+ * LESSON TASK:
+ * Uncomment and review the following helper function to detect weather-related events.
+ */
+// const hasWeatherSignal = (event: TransportEvent) => {
+//   const lower = (value?: string) => value?.toLowerCase() ?? "";
+
+//   const fromItem =
+//     "item" in event &&
+//     event.item &&
+//     typeof (event.item as { name?: string }).name === "string"
+//       ? lower((event.item as { name?: string }).name)
+//       : "";
+
+//   const fromFunction =
+//     "function_name" in event &&
+//     typeof (event as { function_name?: string }).function_name === "string"
+//       ? lower((event as { function_name?: string }).function_name)
+//       : "";
+
+//   const fromName =
+//     event.type === "response.function_call_arguments.done" &&
+//     "name" in event &&
+//     typeof (event as { name?: string }).name === "string"
+//       ? lower((event as { name?: string }).name)
+//       : "";
+
+//   return [fromItem, fromFunction, fromName].some((value) => value.includes("weather"));
+// };
 
 export function MessageTimeline({
   history,
   events,
   isListening,
   greetingText,
+  bannedPhrases,
 }: MessageTimelineProps) {
+  const normalizedBanned = bannedPhrases.map((phrase) => phrase.toLowerCase());
+  /**
+   * LESSON TASK:
+   * Uncomment the following line to enable weather event detection.
+   */
+  // const weatherEventDetected = events.some(hasWeatherSignal);
+
+  const guardrailTrips = events.filter(
+    (event) => event.type === "guardrail_tripped"
+  );
+
   let displayMessages: DisplayMessage[] = history.map((item, index) => {
     const fallbackId =
       "itemId" in item && typeof item.itemId === "string"
@@ -53,7 +103,10 @@ export function MessageTimeline({
         .filter(Boolean)
         .join("\n");
 
-      const containsBanned = false;
+      const lowerText = text.toLowerCase();
+      const containsBanned =
+        item.role === "assistant" &&
+        normalizedBanned.some((phrase) => lowerText.includes(phrase));
 
       return {
         id: fallbackId,
@@ -61,6 +114,28 @@ export function MessageTimeline({
         text: containsBanned ? "" : text || "…",
         isUser: item.role === "user",
         eventType: "message",
+      };
+    }
+
+    /**
+     * LESSON TASK:
+     * Extend the timeline to handle mcp_call and mcp_tool_call events.
+     */
+    if (item.type === "function_call") {
+      const fnName =
+        ("name" in item && typeof item.name === "string"
+          ? item.name
+          : undefined) ||
+        ("function_name" in item && typeof item.function_name === "string"
+          ? item.function_name
+          : undefined) ||
+        "Tool";
+      return {
+        id: fallbackId,
+        role: "system",
+        text: `Using tool: ${fnName}`,
+        isUser: false,
+        eventType: "tool_call",
       };
     }
 
@@ -75,6 +150,59 @@ export function MessageTimeline({
   displayMessages = displayMessages.filter(
     (message) => !(message.isUser && message.text.trim() === greetingText)
   );
+
+  /**
+   * LESSON TASK:
+   * Uncomment and review the code below which adds a handoff message after the last user message
+   * if a weather event was detected.
+   */
+  // if (weatherEventDetected && displayMessages.length > 0) {
+  //   const lastUserIndex = displayMessages.map((m) => m.isUser).lastIndexOf(true);
+  //   const handoffMessage: DisplayMessage = {
+  //     id: `handoff-${history.length}-${events.length}`,
+  //     role: "system",
+  //     text: "Handing off to Weather Agent...",
+  //     isUser: false,
+  //     eventType: "handoff",
+  //   };
+  //   if (lastUserIndex >= 0) {
+  //     displayMessages.splice(lastUserIndex + 1, 0, handoffMessage);
+  //   } else {
+  //     displayMessages.push(handoffMessage);
+  //   }
+  // }
+
+  if (guardrailTrips.length > 0) {
+    const latest = guardrailTrips[guardrailTrips.length - 1];
+    const name: string | undefined =
+      ("guardrail" in latest &&
+        (latest as { guardrail?: { name?: string } }).guardrail?.name) ||
+      ("name" in latest && (latest as { name?: string }).name) ||
+      undefined;
+    const outputInfo =
+      ("outputInfo" in latest &&
+        (latest as { outputInfo?: unknown }).outputInfo) ||
+      ("details" in latest && (latest as { details?: unknown }).details) ||
+      undefined;
+    const detailText =
+      typeof outputInfo === "string"
+        ? outputInfo
+        : outputInfo && typeof outputInfo === "object"
+        ? JSON.stringify(outputInfo)
+        : undefined;
+
+    const detailsSuffix = detailText ? ` – ${detailText}` : "";
+
+    displayMessages.push({
+      id: `guardrail-${history.length}-${events.length}`,
+      role: "system",
+      text: name
+        ? `Response blocked by guardrails: ${name}${detailsSuffix}`
+        : "Response blocked by guardrails.",
+      isUser: false,
+      eventType: "guardrail",
+    });
+  }
 
   if (isListening) {
     displayMessages.push({
