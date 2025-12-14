@@ -142,8 +142,7 @@ const weatherAgent = new RealtimeAgent({
   tools: [
     hostedMcpTool({
       serverLabel: "openmeteo-weather",
-      serverUrl:
-        "https://fluffy-space-pancake-v6rv5qwrwq3x674-8000.app.github.dev/mcp",
+      serverUrl: "https://YOUR-CODESPACES-URL-8000.app.github.dev/mcp",
     }),
   ],
 });
