@@ -20,8 +20,6 @@ Description: Build voice-to-voice, text-to-voice, and image-to-voice AI agents w
 
 # Course reference map
 
-# Course reference map
-
 ## MODULE_01
 
 - Topic: Basic Connection
