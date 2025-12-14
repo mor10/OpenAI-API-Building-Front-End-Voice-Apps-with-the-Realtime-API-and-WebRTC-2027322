@@ -2,7 +2,7 @@
 
 ## Info
 
-Current module: module_end
+Current module: modules_complete
 Title: OpenAI Realtime API: Building Chat Agents with the Realtime API and Agents SDK
 Instructor: Morten Rand-Hendriksen
 Link: https://www.linkedin.com/learning/openai-realtime-api-building-chat-agents-with-the-realtime-api-and-agents-sdk
