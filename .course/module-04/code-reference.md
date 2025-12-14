@@ -89,7 +89,7 @@ const suppressedItems = suppressedItemIdsRef.current;
 const handleHistoryUpdated = (updatedHistory: RealtimeItem[]) => {
   const filtered = updatedHistory.filter((item) => {
     const id = (item as { itemId?: string }).itemId;
-    return true; // OMITTED FOR LESSON TASK - should filter suppressedItems
+    return !id || !suppressedItems.has(id);
   });
   setHistory(filtered);
   const idx = new Map<string, number>();
@@ -116,14 +116,14 @@ if (event.type === "input_audio_buffer.speech_stopped") {
 }
 ```
 
-### 8. Handle conversation.item.created Event
+### 8. Handle conversation.item.create Event
 
 **Context:** Inside `handleTransportEvent`.
 **Action:** Optimistically append new items to history.
 **Code:**
 
 ```typescript
-if (event.type === "conversation.item.created" && event.item) {
+if (event.type === "conversation.item.create" && event.item) {
   const item = event.item as RealtimeItem;
   const id = (item as { itemId?: string }).itemId;
   if (id && suppressedItems.has(id)) return;

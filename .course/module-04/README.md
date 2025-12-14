@@ -11,7 +11,7 @@
 
 - Realtime API server events reference:
   - [`conversation.item.input_audio_transcription.completed`](https://platform.openai.com/docs/api-reference/realtime-server-events/conversation/item/input_audio_transcription/completed)
-  - [`conversation.item.created`](https://platform.openai.com/docs/api-reference/realtime-server-events/conversation/item/created)
+  - [`conversation.item.create`](https://platform.openai.com/docs/api-reference/realtime-client-events/conversation/item/create)
   - [`input_audio_buffer.speech_started`](https://platform.openai.com/docs/api-reference/realtime-server-events/input_audio_buffer/speech_started)
   - [`input_audio_buffer.speech_stopped`](https://platform.openai.com/docs/api-reference/realtime-server-events/input_audio_buffer/speech_stopped)
 
@@ -30,7 +30,7 @@
 3. Add state variables for `history`, `isListening`, and tracking refs for suppressed items and history index.
 4. Implement `handleHistoryUpdated` to sync history state and track item indices.
 5. Track speech events in `handleTransportEvent` to update `isListening`.
-6. Handle `conversation.item.created` events to optimistically append new items.
+6. Handle `conversation.item.create` events to optimistically append new items.
 7. Subscribe to `history_updated` events and clean up listeners.
 8. Reset states in `disconnect` and return new properties from the hook.
 9. Import `MessageInput` and `MessageTimeline` components in `RealtimeChat.tsx`.

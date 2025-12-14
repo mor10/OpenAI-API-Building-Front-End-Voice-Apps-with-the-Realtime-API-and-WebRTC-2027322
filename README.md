@@ -1,38 +1,47 @@
-# OpenAI API: Building Front-End Voice Apps with the Realtime API and WebRTC
+# OpenAI Realtime API: Building Voice Agents with Realtime API and the Agents SDK
 
-This is the repository for the LinkedIn Learning course OpenAI API: Building Front-End Voice Apps with the Realtime API and WebRTC. The full course is available from [LinkedIn Learning][lil-course-url].
+This is the repository for the LinkedIn Learning course _OpenAI Realtime API: Building Voice Agents with Realtime API and the Agents SDK_. The full course is available from [LinkedIn Learning][lil-course-url].
 
 ![lil-thumbnail-url]
 
 ## Course Description
 
-With OpenAI’s Realtime API and Agents SDK, you can build custom real-time voice-to-voice AI chat into any front-end web app or other app through WebRTC. In this course, you’ll explore how to create advanced voice agents using the Realtime API through the Agents SDK.
+Build voice-powered AI agents with OpenAI's Realtime API and the Agents SDK. Learn how to set up advanced features including guardrails, function calling, MCP servers, and live image input via device camera, and build secure apps with ephemeral tokens.
 
-Features covered:
+What's covered:
 
-- Create agents, sessions, and connections using a one-time ephemeral tokens
-- Build voice apps with real-time text transcriptions in a chat
+- How to build a Realtime voice agent using the Agents SDK
+- Create a greeting message
 - Add guardrails for custom language moderation
 - Use custom functions as tools
 - Integrate MCP servers for external connections
 - Activate the device camera to enable the agent to comment on visual input
 
+## Quick Start
+
+The `main` branch contains the completed project. To go hands-on with the course:
+
+1. Set up the development auth server as described below
+2. Use `git checkout module-01` to swith to set the `/sandbox/` folder to the beginning state
+3. Follow the course instructions
+
 ## Instructions
 
 This is a hands-on course and you'll get the best learning experience by following along step-by-step with these exercise files. The project is best used in GitHub Codespaces.
 
-The exercise files are organized in two main folders:
+The exercise files contain three separate software packages:
 
-- `/project-baseline/`: The starting point for the project. This is where you should begin working through the course.
-- `/project-completed/`: The completed project files, which you can refer to at any time.
+- `/sandbox/`: The main project workspace where you'll build the application step-by-step.
+- `/auth-server/`: A basic Node.js-based development auth server to supply the front-end app with an ephemeral OpenAI API token for authentication. See `/auth-server/README.md` for more details.
+- `/mcp-server/`: A simple Python-based MCP server obtaining real-time weather data from Open-Meteo's public API. See `/mcp-server/README.md` for more details.
 
-## Authenticating through a Development Auth Server
+### Preparation step: Authenticating through a Development Auth Server
 
-The project also contains a basic Node.js-based auth server to supply the front-end app with an ephemeral OpenAI API token for authentication. It is found in the `./auth-server/` folder. The Auth Server needs to run on a public URL for cross-device functionality so the recommendation is to run this entire project in GitHub Codespaces.
+The Realtime API requires token-based authentication. In this project you'll use an ephemeral token obtained through a development auth server. This removes the need for maintaining a long-lived API key in the front-end app.
 
-If you're running the exercise files in GitHub Codespaces, the dependencies for the auth server are automatically installed. If you're running the exercise files on your local computer, install the dependencies using `npm install`.
+If you're running the exercise files in GitHub Codespaces (recommended), the dependencies for the auth server are automatically installed. If you're running the exercise files on your local computer, install the dependencies using `npm install`.
 
-### Setting up the Auth Server
+#### Setting up the Auth Server
 
 1. Visit the [platform.openai.com](https://platform.openai.com/api-keys) to create an API key for the project.
 2. Make a copy of `/auth-server/.env-template` to create a new `.env` file in the `/auth-server/` directory with the following:
@@ -41,43 +50,42 @@ If you're running the exercise files in GitHub Codespaces, the dependencies for 
 OPENAI_API_KEY=your-api-key
 ```
 
-3. Run the server from terminal by navigating to the `/auth-server/` directory and running
+3. In a dedicated terminal, start the server by navigating to the `/auth-server/` directory and running
 
 ```bash
 node server.js
 ```
 
-4. In Codespaces, go to Ports and set port `3000` to **Public**.
+4. In Codespaces, go to Ports and set the visibility of port `3000` to **Public**.
 5. Copy the live URL for `auth-server` (e.g., `https://<RANDOM-GENERATED-URI>-3000.app.github.dev`)
-6. In both `/project-baseline/` and `/project-completed/`, copy `.env.local.template` to `.env.local` and set `NEXT_PUBLIC_AUTH_SERVER_URL=` to the `auth-server` URL.
+6. In `/sandbox/`, copy `.env.local.template` to `.env.local` and set `NEXT_PUBLIC_AUTH_SERVER_URL=` to the `auth-server` URL.
 
 To stop the auth server, run `Ctrl+C` in the terminal.
 
 ## Setting up the MCP Server
 
-The project comes with a simple Python-based MCP server to enable external connections for the voice agent. It is found in the `./mcp-server/` folder. The MCP server queries live weather data from any given location from Open Meteo's public API and returns the information to the MCP client (in this case the voice agent).
+Just like the development auth server, the MCP server needs to run in its own terminal with its port visibility set to **Public** in Codespaces.
 
-### Setting up the MCP Server
-
-1. Navigate to the `/mcp-server/` directory in terminal
+1. In a dedicated terminal, navigate to the `/mcp-server/` directory
 2. Install the dependencies using `uv sync`
 3. Start the MCP server using `uv run mcp_open_meteo/server.py`
-4. In Codespaces, go to Ports and set port `8000` to **Public**.
-5. Identify the live URL for the MCP server, and it to `mcp-config.js`.
-6. In `/project-complete/agents/weatherAgent.ts`, update the `serverUrl` property with the live URL of your MCP server.
+4. In Codespaces, go to Ports and set the visibility of port `8000` to **Public**.
+5. In Module 07, follow the instructions to set the MCP server URL in the front-end app.
 
 To stop the MCP server, run `Ctrl+C` in the terminal.
 
 ## Running the Front-End App
 
-To run the projects in either `/project-baseline/` or `/project-completed/`:
+The front-end app is built with Next.js and uses the standard Next.js development server that allows for hot-reloading while you work.
+
+The app also needs its own dedicated terminal meaning you'll have three terminals running at the same time.
 
 1. Open the folder in terminal
 2. Install the dependencies using `npm install`
 3. Start the development server using `npm run dev`
 4. Open the provided localhost URL in your browser
 
-To test the app on other devices, set the port for the live server to **Public**.
+**TIP:** To test the app on other devices, in Codespaces go to Ports and set the visibility of port `9307` to **Public**.
 
 ## Instructor
 

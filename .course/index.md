@@ -20,11 +20,60 @@ Description: Build voice-to-voice, text-to-voice, and image-to-voice AI agents w
 
 # Course reference map
 
-- Module 01: .course/module-01/readme.md | .course/module-01/code-reference.md | Branch: module-01
-- Module 02: .course/module-02/readme.md | .course/module-02/code-reference.md | Branch: module-02
-- Module 03: .course/module-03/readme.md | .course/module-03/code-reference.md | Branch: module-03
-- Module 04: .course/module-04/readme.md | .course/module-04/code-reference.md | Branch: module-04
-- Module 05: .course/module-05/readme.md | .course/module-05/code-reference.md | Branch: module-05
-- Module 06: .course/module-06/readme.md | .course/module-06/code-reference.md | Branch: module-06
-- Module 07: .course/module-07/readme.md | .course/module-07/code-reference.md | Branch: module-07
-- Module 08: .course/module-08/readme.md | .course/module-08/code-reference.md | Branch: module-08
+# Course reference map
+
+## MODULE_01
+
+- Topic: Basic Connection
+- Documentation: .course/module-01/readme.md
+- Code Reference: .course/module-01/code-reference.md
+- Branch: module-01
+
+## MODULE_02
+
+- Topic: Greeting Message
+- Documentation: .course/module-02/readme.md
+- Code Reference: .course/module-02/code-reference.md
+- Branch: module-02
+
+## MODULE_03
+
+- Topic: Event Log
+- Documentation: .course/module-03/readme.md
+- Code Reference: .course/module-03/code-reference.md
+- Branch: module-03
+
+## MODULE_04
+
+- Topic: Text Chat
+- Documentation: .course/module-04/readme.md
+- Code Reference: .course/module-04/code-reference.md
+- Branch: module-04
+
+## MODULE_05
+
+- Topic: Guardrails
+- Documentation: .course/module-05/readme.md
+- Code Reference: .course/module-05/code-reference.md
+- Branch: module-05
+
+## MODULE_06
+
+- Topic: Tools and Function Calling
+- Documentation: .course/module-06/readme.md
+- Code Reference: .course/module-06/code-reference.md
+- Branch: module-06
+
+## MODULE_07
+
+- Topic: MCP Integration
+- Documentation: .course/module-07/readme.md
+- Code Reference: .course/module-07/code-reference.md
+- Branch: module-07
+
+## MODULE_08
+
+- Topic: Camera Input
+- Documentation: .course/module-08/readme.md
+- Code Reference: .course/module-08/code-reference.md
+- Branch: module-08
