@@ -9,18 +9,20 @@
  * @link https://openai.github.io/openai-agents-js/guides/voice-agents/
  */
 
-/**
- * LESSON TASK:
- *
- * Import useEffect, useRef, useState, and RefObject from React
- */
-import { useCallback, useRef, useState, useRef useStatus } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 
 /**
  * LESSON TASK:
  *
- * Import RealtimeAgent and RealtimeSession from @openai/agents/realtime
+ * Import RealtimeItem and TransportEvent from @openai/agents/realtime
  */
+import { RealtimeAgent, RealtimeSession } from "@openai/agents/realtime";
 
 /**
  * ============================================================================
@@ -55,18 +57,20 @@ export type ConnectionState = "idle" | "connecting" | "connected";
 /**
  * LESSON TASK:
  *
- * Add sessionRef and config to UseRealtimeAgentResult type
+ * Add events to the hook result
  */
 export type UseRealtimeAgentResult = {
   connect: () => Promise<void>;
   disconnect: () => void;
   toggleMute: () => void;
+  sendText: (message: string) => void;
   interrupt: () => void;
   connectionState: ConnectionState;
   isConnected: boolean;
   isConnecting: boolean;
   isMuted: boolean;
   error: string | null;
+  sessionRef: RefObject<RealtimeSession | null>;
   config: RealtimeConfig;
 };
 
@@ -187,6 +191,12 @@ export function useRealtimeAgent(): UseRealtimeAgentResult {
    * Refs and state hooks for tracking session, history, events, and UI state.
    */
   const sessionRef = useRef<RealtimeSession | null>(null);
+
+  /**
+   * LESSON TASK:
+   *
+   * Add state for events using the state of the TransportEvent type
+   */
   const [error, setError] = useState<string | null>(null);
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("idle");
@@ -199,12 +209,37 @@ export function useRealtimeAgent(): UseRealtimeAgentResult {
    */
 
   useEffect(() => {
+    const agent = new RealtimeAgent({
+      name: "Assistant",
+      instructions: config.instructions,
+    });
+
+    const session = new RealtimeSession(agent, {
+      model: config.model,
+      config: {
+        audio: {
+          output: { voice: config.voice },
+        },
+      },
+    });
+
+    /**
+     * Event handler: transport_event
+     * Processes Realtime server events.
+     * @link https://platform.openai.com/docs/api-reference/realtime-server-events
+     *
+     * - Updates the event log
+     * - Updates the text transcript (chat history)
+     * - Updates speech detection state
+     * - Maintains conversation item lifecycle (created/updated/completed/deleted)
+     */
+
     /**
      * LESSON TASK:
      *
-     * Initialize RealtimeAgent and RealtimeSession inside useEffect
-     * - Create new RealtimeAgent with name "Assistant" and config.instructions
-     * - Create new RealtimeSession with the agent, config.model, and audio output voice
+     * Implement handleTransportEvent to:
+     * - Log all events except transcript deltas
+     * - Update isListening state on speech_started and speech_stopped events
      */
 
     /**
@@ -247,9 +282,21 @@ export function useRealtimeAgent(): UseRealtimeAgentResult {
 
     // Store session reference and attach event listeners
     sessionRef.current = session;
+
+    /**
+     * LESSON TASK:
+     *
+     * Attach event listeners for transport_event to call handleTransportEvent
+     */
+
     session.on("error", handleError);
 
     // Cleanup function: detach listeners, close session, clear refs
+    /**
+     * LESSON TASK:
+     *
+     * Detach event transport_event listener on session.off
+     */
     return () => {
       session.off("error", handleError);
       session.close();
@@ -270,6 +317,13 @@ export function useRealtimeAgent(): UseRealtimeAgentResult {
   const disconnect = useCallback(() => {
     if (!sessionRef.current) return;
     resetRealtimeSession(sessionRef.current);
+
+    /**
+     * LESSON TASK:
+     *
+     * Reset events state on disconnect
+     */
+
     setIsMuted(false);
     setError(null);
     setConnectionState("idle");
@@ -280,38 +334,29 @@ export function useRealtimeAgent(): UseRealtimeAgentResult {
    * Fetches ephemeral token and establishes WebSocket connection.
    * If already connected, disconnects instead (toggle behavior).
    */
+  const connect = useCallback(async () => {
+    if (!sessionRef.current) return;
+    if (connectionState === "connecting") return;
 
-  /**
-   * LESSON TASK:
-   *
-   * Uncomment and review the connect function below.
-   *
-   * The session connection is created on this line:
-   * `await sessionRef.current.connect({ apiKey });`
-   */
-  // const connect = useCallback(async () => {
-  //   if (!sessionRef.current) return;
-  //   if (connectionState === "connecting") return;
+    if (connectionState === "connected") {
+      disconnect();
+      return;
+    }
 
-  //   if (connectionState === "connected") {
-  //     disconnect();
-  //     return;
-  //   }
-
-  //   setError(null);
-  //   setConnectionState("connecting");
-  //   try {
-  //     const apiKey = await fetchRealtimeToken(config.authUrl);
-  //     await sessionRef.current.connect({ apiKey });
-  //     setConnectionState("connected");
-  //     setIsMuted(Boolean(sessionRef.current.muted));
-  //   } catch (err) {
-  //     const message =
-  //       err instanceof Error ? err.message : "Unable to connect to session";
-  //     setError(message);
-  //     setConnectionState("idle");
-  //   }
-  // }, [config.authUrl, connectionState, disconnect]);
+    setError(null);
+    setConnectionState("connecting");
+    try {
+      const apiKey = await fetchRealtimeToken(config.authUrl);
+      await sessionRef.current.connect({ apiKey });
+      setConnectionState("connected");
+      setIsMuted(Boolean(sessionRef.current.muted));
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Unable to connect to session";
+      setError(message);
+      setConnectionState("idle");
+    }
+  }, [config.authUrl, connectionState, disconnect]);
 
   /**
    * Toggles audio input mute state.
@@ -322,6 +367,20 @@ export function useRealtimeAgent(): UseRealtimeAgentResult {
     const newMuted = !(sessionRef.current.muted ?? false);
     sessionRef.current.mute(newMuted);
     setIsMuted(newMuted);
+  }, []);
+
+  /**
+   * Sends a text message to the agent, which will respond with spoken audio.
+   * Primary method for text-based interaction.
+   */
+  const sendText = useCallback((message: string) => {
+    if (!sessionRef.current || !message.trim()) return;
+    setError(null);
+    sessionRef.current.sendMessage({
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: message.trim() }],
+    });
   }, []);
 
   /**
@@ -343,17 +402,20 @@ export function useRealtimeAgent(): UseRealtimeAgentResult {
   /**
    * LESSON TASK:
    *
-   * Add connect to the returned object
+   * Return events in the hook result
    */
   return {
+    connect,
     disconnect,
     toggleMute,
+    sendText,
     interrupt,
     connectionState,
     isConnected: connectionState === "connected",
     isConnecting: connectionState === "connecting",
     isMuted,
     error,
+    sessionRef,
     config,
   };
 }

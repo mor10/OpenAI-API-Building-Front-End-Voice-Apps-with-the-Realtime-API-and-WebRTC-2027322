@@ -1,15 +1,32 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConnectionPanel } from "@/components/realtime/ConnectionPanel";
-import { useRealtimeAgent } from "@/lib/useRealtimeAgent";
+
+/**
+ * LESSON TASK:
+ *
+ * Import the EventFeed component
+ */
+
+import { useRealtimeAgent, REALTIME_DEFAULTS } from "@/lib/useRealtimeAgent";
 
 export function RealtimeChat() {
+  const hasGreetedRef = useRef(false);
+
+  /**
+   * LESSON TASK:
+   *
+   * Import events from useRealtimeAgent
+   */
   const {
     connect,
     disconnect,
     toggleMute,
+    sendText,
     interrupt,
     connectionState,
     isConnected,
@@ -18,6 +35,16 @@ export function RealtimeChat() {
     error,
     config,
   } = useRealtimeAgent();
+
+  useEffect(() => {
+    if (isConnected && !hasGreetedRef.current) {
+      hasGreetedRef.current = true;
+      sendText(REALTIME_DEFAULTS.greeting);
+    }
+    if (!isConnected) {
+      hasGreetedRef.current = false;
+    }
+  }, [isConnected, sendText]);
 
   const handleConnectToggle = () => {
     if (isConnected) {
@@ -77,6 +104,10 @@ export function RealtimeChat() {
               void connect();
             }}
           />
+          {/** LESSON TASK:
+           *
+           * Add the EventFeed component here, passing in the events prop
+           */}
         </div>
       </div>
     </div>
