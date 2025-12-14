@@ -14,7 +14,7 @@
  *
  * Import useEffect, useRef, useState, and RefObject from React
  */
-import { useCallback, useRef, useState, useRef useStatus } from "react";
+import { useCallback, useRef, useState } from "react";
 
 /**
  * LESSON TASK:
