@@ -9,21 +9,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-/**
- * LESSON TASK:
- * Review the EventFeed component implementation
- * props: events - array of TransportEvent objects
- */
 export type EventFeedProps = {
   events: TransportEvent[];
 };
 
-/**
- * LESSON TASK:
- * Review the EventFeed component implementation
- * @param events - array of TransportEvent objects
- * NOTE: events holds the continuous stream of every server event received
- */
 export function EventFeed({ events }: EventFeedProps) {
   return (
     <Card className="flex-1">

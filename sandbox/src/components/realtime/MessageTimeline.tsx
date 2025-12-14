@@ -12,6 +12,10 @@ export type MessageTimelineProps = {
   greetingText: string;
 };
 
+/**
+ * LESSON TASK:
+ * Extend the DisplayMessage type to include guardrail messages.
+ */
 export type DisplayMessage = {
   id: string;
   role: string;
@@ -26,6 +30,14 @@ export function MessageTimeline({
   isListening,
   greetingText,
 }: MessageTimelineProps) {
+  /**
+   * LESSON TASK:
+   * Uncomment the following block to enable guardrail trip messages in the timeline.
+   */
+  // const guardrailTrips = events.filter(
+  //   (event) => event.type === "guardrail_tripped"
+  // );
+
   let displayMessages: DisplayMessage[] = history.map((item, index) => {
     const fallbackId =
       "itemId" in item && typeof item.itemId === "string"
@@ -53,6 +65,16 @@ export function MessageTimeline({
         .filter(Boolean)
         .join("\n");
 
+      /**
+       * LESSON TASK:
+       * Replace `const containsBanned = false;` with the commented out block below
+       * to enable guardrail filtering of assistant messages.
+       */
+      // const lowerText = text.toLowerCase();
+      //
+      // const containsBanned =
+      //   item.role === "assistant" &&
+      //   normalizedBanned.some((phrase) => lowerText.includes(phrase));
       const containsBanned = false;
 
       return {
@@ -75,6 +97,41 @@ export function MessageTimeline({
   displayMessages = displayMessages.filter(
     (message) => !(message.isUser && message.text.trim() === greetingText)
   );
+
+  /**
+   * LESSON TASK:
+   * Uncomment the following block to add guardrail trip messages to the timeline.
+   */
+  // if (guardrailTrips.length > 0) {
+  //   const latest = guardrailTrips[guardrailTrips.length - 1];
+  //   const name: string | undefined =
+  //     ("guardrail" in latest &&
+  //       (latest as { guardrail?: { name?: string } }).guardrail?.name) ||
+  //     ("name" in latest && (latest as { name?: string }).name) ||
+  //     undefined;
+  //   const outputInfo =
+  //     ("outputInfo" in latest && (latest as { outputInfo?: unknown }).outputInfo) ||
+  //     ("details" in latest && (latest as { details?: unknown }).details) ||
+  //     undefined;
+  //   const detailText =
+  //     typeof outputInfo === "string"
+  //       ? outputInfo
+  //       : outputInfo && typeof outputInfo === "object"
+  //       ? JSON.stringify(outputInfo)
+  //       : undefined;
+
+  //   const detailsSuffix = detailText ? ` – ${detailText}` : "";
+
+  //   displayMessages.push({
+  //     id: `guardrail-${history.length}-${events.length}`,
+  //     role: "system",
+  //     text: name
+  //       ? `Response blocked by guardrails: ${name}${detailsSuffix}`
+  //       : "Response blocked by guardrails.",
+  //     isUser: false,
+  //     eventType: "guardrail",
+  //   });
+  // }
 
   if (isListening) {
     displayMessages.push({

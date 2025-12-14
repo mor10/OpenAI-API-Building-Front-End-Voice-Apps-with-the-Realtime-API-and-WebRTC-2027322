@@ -9,18 +9,24 @@
  * @link https://openai.github.io/openai-agents-js/guides/voice-agents/
  */
 
-/**
- * LESSON TASK:
- *
- * Import useEffect, useRef, useState, and RefObject from React
- */
-import { useCallback, useRef, useState, useRef useStatus } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
+import {
+  RealtimeAgent,
+  RealtimeSession,
+  type RealtimeItem,
+  type TransportEvent,
 
-/**
- * LESSON TASK:
- *
- * Import RealtimeAgent and RealtimeSession from @openai/agents/realtime
- */
+  /**
+   * LESSON TASK:
+   * Import RealtimeOutputGuardrail type
+   */
+} from "@openai/agents/realtime";
 
 /**
  * ============================================================================
@@ -51,22 +57,21 @@ export type ConnectionState = "idle" | "connecting" | "connected";
  * Return value from useRealtimeAgent hook.
  * Provides controls, state, and data for managing the realtime session.
  */
-
-/**
- * LESSON TASK:
- *
- * Add sessionRef and config to UseRealtimeAgentResult type
- */
 export type UseRealtimeAgentResult = {
   connect: () => Promise<void>;
   disconnect: () => void;
   toggleMute: () => void;
+  sendText: (message: string) => void;
   interrupt: () => void;
   connectionState: ConnectionState;
   isConnected: boolean;
   isConnecting: boolean;
   isMuted: boolean;
+  isListening: boolean;
   error: string | null;
+  history: RealtimeItem[];
+  events: TransportEvent[];
+  sessionRef: RefObject<RealtimeSession | null>;
   config: RealtimeConfig;
 };
 
@@ -101,6 +106,10 @@ const DEFAULT_VOICE = "cedar";
 // Default size of the event log to retain in state.
 const DEFAULT_EVENT_LOG_SIZE = 40;
 
+/**
+ * LESSON TASK:
+ * Review DEFAULT_BANNED_PHRASES
+ */
 // Array of banned phrases to block in agent output through guardrails.
 const DEFAULT_BANNED_PHRASES = [
   "chocolate-covered peanut butter",
@@ -121,6 +130,24 @@ export const REALTIME_DEFAULTS: RealtimeConfig = {
   eventLogSize: DEFAULT_EVENT_LOG_SIZE,
   bannedPhrases: [...DEFAULT_BANNED_PHRASES],
 };
+
+/**
+ * ============================================================================
+ * GUARDRAIL FACTORY
+ * ============================================================================
+ * Creates a guardrail that detects banned phrases in agent output.
+ * When triggered, the response is interrupted and removed from history.
+ *
+ * @param bannedPhrases - Array of phrases to block (case-insensitive)
+ * @returns Array of guardrail configurations
+ * @link https://openai.github.io/openai-agents-js/guides/voice-agents/build/#guardrails
+ */
+
+/** LESSON TASK:
+ * Implement a guardrail that uses bannedPhrases from the configuration
+ * - Create a constant createDefaultGuardrails
+ * - Use the RealtimeOutputGuardrail type
+ */
 
 /**
  * ============================================================================
@@ -159,6 +186,11 @@ async function fetchRealtimeToken(authUrl: string) {
  */
 function resetRealtimeSession(session: RealtimeSession | null) {
   if (!session) return;
+  try {
+    session.updateHistory([]);
+  } catch {
+    // ignore failures from partially open sessions
+  }
   session.close();
 }
 
@@ -187,10 +219,15 @@ export function useRealtimeAgent(): UseRealtimeAgentResult {
    * Refs and state hooks for tracking session, history, events, and UI state.
    */
   const sessionRef = useRef<RealtimeSession | null>(null);
+  const [history, setHistory] = useState<RealtimeItem[]>([]);
+  const [events, setEvents] = useState<TransportEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("idle");
   const [isMuted, setIsMuted] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const suppressedItemIdsRef = useRef<Set<string>>(new Set());
+  const historyIndexRef = useRef<Map<string, number>>(new Map());
 
   /**
    * --------------------------------------------------------------------------
@@ -198,14 +235,121 @@ export function useRealtimeAgent(): UseRealtimeAgentResult {
    * --------------------------------------------------------------------------
    */
 
+  /**
+   * LESSON TASK:
+   * Add outputGuardrails pointing back to createDefaultGuardrails.
+   */
   useEffect(() => {
+    const agent = new RealtimeAgent({
+      name: "Assistant",
+      instructions: config.instructions,
+    });
+
+    const session = new RealtimeSession(agent, {
+      model: config.model,
+      config: {
+        audio: {
+          output: { voice: config.voice },
+        },
+      },
+    });
+
+    // Get reference to suppressed items set for use in event handlers.
+    const suppressedItems = suppressedItemIdsRef.current;
+
     /**
-     * LESSON TASK:
-     *
-     * Initialize RealtimeAgent and RealtimeSession inside useEffect
-     * - Create new RealtimeAgent with name "Assistant" and config.instructions
-     * - Create new RealtimeSession with the agent, config.model, and audio output voice
+     * Event handler: history_updated
+     * Fires on every history change (user messages, agent responses, function calls).
+     * Maintains an index map for efficient item lookups by ID.
      */
+
+    /** LESSON TASK:
+     * Omit supressedItems from history remove guardrail-tripped items from the chat.
+     */
+    const handleHistoryUpdated = (updatedHistory: RealtimeItem[]) => {
+      const filtered = updatedHistory.filter((item) => {
+        const id = (item as { itemId?: string }).itemId;
+        return true;
+      });
+      setHistory(filtered);
+      const idx = new Map<string, number>();
+      filtered.forEach((item, index) => {
+        const id = (item as { itemId?: string }).itemId;
+        if (id) idx.set(id, index);
+      });
+      historyIndexRef.current = idx;
+    };
+
+    /**
+     * Event handler: transport_event
+     * Processes Realtime server events.
+     * @link https://platform.openai.com/docs/api-reference/realtime-server-events
+     *
+     * - Updates the event log
+     * - Updates the text transcript (chat history)
+     * - Updates speech detection state
+     * - Maintains conversation item lifecycle (created/updated/completed/deleted)
+     */
+    const handleTransportEvent = (event: TransportEvent) => {
+      if (
+        event.type !== "response.output_audio_transcript.delta" &&
+        event.type !== "response.input_audio_transcription.delta"
+      ) {
+        console.log("Realtime Event:", event);
+      }
+
+      setEvents((prev) => {
+        const next = [...prev, event];
+        if (next.length > config.eventLogSize) {
+          return next.slice(next.length - config.eventLogSize);
+        }
+        return next;
+      });
+
+      if (event.type === "input_audio_buffer.speech_started") {
+        setIsListening(true);
+      }
+      if (event.type === "input_audio_buffer.speech_stopped") {
+        setIsListening(false);
+      }
+
+      if (event.type === "conversation.item.created" && event.item) {
+        const item = event.item as RealtimeItem;
+        const id = (item as { itemId?: string }).itemId;
+        if (id && suppressedItems.has(id)) return;
+        setHistory((prev) => [...prev, item]);
+      }
+
+      if (
+        (event.type === "conversation.item.updated" ||
+          event.type === "conversation.item.completed") &&
+        event.item
+      ) {
+        const item = event.item as RealtimeItem;
+        const id = (item as { itemId?: string }).itemId;
+        if (id && suppressedItems.has(id)) return;
+        setHistory((prev) => {
+          const idx = prev.findIndex(
+            (i) => (i as { itemId?: string }).itemId === id
+          );
+          if (idx !== -1) {
+            const next = [...prev];
+            next[idx] = item;
+            return next;
+          }
+          return [...prev, item];
+        });
+      }
+
+      if (event.type === "conversation.item.deleted" && event.item) {
+        const item = event.item as RealtimeItem;
+        const id = (item as { itemId?: string }).itemId;
+        if (!id) return;
+        setHistory((prev) =>
+          prev.filter((i) => (i as { itemId?: string }).itemId !== id)
+        );
+      }
+    };
 
     /**
      * Event handler: error
@@ -245,15 +389,86 @@ export function useRealtimeAgent(): UseRealtimeAgentResult {
       }
     };
 
+    /**
+     * LESSON TASK:
+     * Review handleGuardrailTripped implementation below:
+     */
+
+    /**
+     * Event handler: guardrail_tripped
+     * Responds to guardrail violations by:
+     * - Interrupting current response
+     * - Muting the agent
+     * - Removing offending item from history
+     * - Displaying error to user
+     */
+    const handleGuardrailTripped = (...args: unknown[]) => {
+      try {
+        session.interrupt();
+        setIsMuted(true);
+      } catch {
+        // ignore
+      }
+
+      try {
+        const details = args[3] as { itemId?: string } | undefined;
+        const offendingId = details?.itemId;
+        if (offendingId) {
+          suppressedItems.add(offendingId);
+          setHistory((prev) =>
+            prev.filter((item) => {
+              const id = (item as { itemId?: string }).itemId;
+              return id !== offendingId;
+            })
+          );
+
+          const cleanedHistory = (session.history ?? []).filter((item) => {
+            const id = (item as { itemId?: string }).itemId;
+            return id !== offendingId;
+          });
+          const idxMap = new Map<string, number>();
+          cleanedHistory.forEach((item, index) => {
+            const id = (item as { itemId?: string }).itemId;
+            if (id) idxMap.set(id, index);
+          });
+          historyIndexRef.current = idxMap;
+          session.updateHistory(cleanedHistory as RealtimeItem[]);
+        }
+      } catch (err) {
+        console.warn("Failed to remove offending item after guardrail", err);
+      }
+
+      setError("Response blocked by guardrails.");
+    };
+
     // Store session reference and attach event listeners
     sessionRef.current = session;
+
+    session.on("history_updated", handleHistoryUpdated);
+    session.on("transport_event", handleTransportEvent);
     session.on("error", handleError);
+
+    /**
+     * LESSON TASK:
+     * Attach guardrail_tripped event handler
+     * On event, call handleGuardrailTripped
+     */
 
     // Cleanup function: detach listeners, close session, clear refs
     return () => {
+      session.off("history_updated", handleHistoryUpdated);
+      session.off("transport_event", handleTransportEvent);
       session.off("error", handleError);
+
+      /**
+       * LESSON TASK:
+       * Detach guardrail_tripped event handler using session.off
+       */
+
       session.close();
       sessionRef.current = null;
+      suppressedItems.clear();
+      historyIndexRef.current.clear();
     };
   }, [config]);
 
@@ -270,7 +485,10 @@ export function useRealtimeAgent(): UseRealtimeAgentResult {
   const disconnect = useCallback(() => {
     if (!sessionRef.current) return;
     resetRealtimeSession(sessionRef.current);
+    setHistory([]);
+    setEvents([]);
     setIsMuted(false);
+    setIsListening(false);
     setError(null);
     setConnectionState("idle");
   }, []);
@@ -280,38 +498,29 @@ export function useRealtimeAgent(): UseRealtimeAgentResult {
    * Fetches ephemeral token and establishes WebSocket connection.
    * If already connected, disconnects instead (toggle behavior).
    */
+  const connect = useCallback(async () => {
+    if (!sessionRef.current) return;
+    if (connectionState === "connecting") return;
 
-  /**
-   * LESSON TASK:
-   *
-   * Uncomment and review the connect function below.
-   *
-   * The session connection is created on this line:
-   * `await sessionRef.current.connect({ apiKey });`
-   */
-  // const connect = useCallback(async () => {
-  //   if (!sessionRef.current) return;
-  //   if (connectionState === "connecting") return;
+    if (connectionState === "connected") {
+      disconnect();
+      return;
+    }
 
-  //   if (connectionState === "connected") {
-  //     disconnect();
-  //     return;
-  //   }
-
-  //   setError(null);
-  //   setConnectionState("connecting");
-  //   try {
-  //     const apiKey = await fetchRealtimeToken(config.authUrl);
-  //     await sessionRef.current.connect({ apiKey });
-  //     setConnectionState("connected");
-  //     setIsMuted(Boolean(sessionRef.current.muted));
-  //   } catch (err) {
-  //     const message =
-  //       err instanceof Error ? err.message : "Unable to connect to session";
-  //     setError(message);
-  //     setConnectionState("idle");
-  //   }
-  // }, [config.authUrl, connectionState, disconnect]);
+    setError(null);
+    setConnectionState("connecting");
+    try {
+      const apiKey = await fetchRealtimeToken(config.authUrl);
+      await sessionRef.current.connect({ apiKey });
+      setConnectionState("connected");
+      setIsMuted(Boolean(sessionRef.current.muted));
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Unable to connect to session";
+      setError(message);
+      setConnectionState("idle");
+    }
+  }, [config.authUrl, connectionState, disconnect]);
 
   /**
    * Toggles audio input mute state.
@@ -322,6 +531,20 @@ export function useRealtimeAgent(): UseRealtimeAgentResult {
     const newMuted = !(sessionRef.current.muted ?? false);
     sessionRef.current.mute(newMuted);
     setIsMuted(newMuted);
+  }, []);
+
+  /**
+   * Sends a text message to the agent, which will respond with spoken audio.
+   * Primary method for text-based interaction.
+   */
+  const sendText = useCallback((message: string) => {
+    if (!sessionRef.current || !message.trim()) return;
+    setError(null);
+    sessionRef.current.sendMessage({
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: message.trim() }],
+    });
   }, []);
 
   /**
@@ -339,21 +562,21 @@ export function useRealtimeAgent(): UseRealtimeAgentResult {
    * --------------------------------------------------------------------------
    * Exposes all controls, state, and session data to consuming components.
    */
-
-  /**
-   * LESSON TASK:
-   *
-   * Add connect to the returned object
-   */
   return {
+    connect,
     disconnect,
     toggleMute,
+    sendText,
     interrupt,
     connectionState,
     isConnected: connectionState === "connected",
     isConnecting: connectionState === "connecting",
     isMuted,
+    isListening,
     error,
+    history,
+    events,
+    sessionRef,
     config,
   };
 }

@@ -1,23 +1,53 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConnectionPanel } from "@/components/realtime/ConnectionPanel";
-import { useRealtimeAgent } from "@/lib/useRealtimeAgent";
+import { EventFeed } from "@/components/realtime/EventFeed";
+import { MessageInput } from "@/components/realtime/MessageInput";
+import { MessageTimeline } from "@/components/realtime/MessageTimeline";
+import { useRealtimeAgent, REALTIME_DEFAULTS } from "@/lib/useRealtimeAgent";
 
 export function RealtimeChat() {
+  const [message, setMessage] = useState("");
+
+  const hasGreetedRef = useRef(false);
+
   const {
     connect,
     disconnect,
     toggleMute,
+    sendText,
     interrupt,
     connectionState,
     isConnected,
     isConnecting,
     isMuted,
+    isListening,
+    history,
+    events,
     error,
+    sessionRef,
     config,
   } = useRealtimeAgent();
+
+  useEffect(() => {
+    if (isConnected && !hasGreetedRef.current) {
+      hasGreetedRef.current = true;
+      sendText(REALTIME_DEFAULTS.greeting);
+    }
+    if (!isConnected) {
+      hasGreetedRef.current = false;
+    }
+  }, [isConnected, sendText]);
+
+  const handleSubmitMessage = (value: string) => {
+    if (!value || !isConnected) return;
+    sendText(value);
+    setMessage("");
+  };
 
   const handleConnectToggle = () => {
     if (isConnected) {
@@ -36,11 +66,28 @@ export function RealtimeChat() {
           </CardHeader>
           <CardContent className="flex flex-1 flex-col gap-4">
             <div className="flex-1 overflow-y-auto rounded-lg border border-border/60 bg-background/60 p-4">
-              <div className="flex h-full items-center justify-center text-center text-sm text-muted-foreground">
-                No text chat yet - just audio.
-              </div>
+              {history.length === 0 ? (
+                <div className="flex h-full items-center justify-center text-center text-sm text-muted-foreground">
+                  No messages yet. Connect and start talking!
+                </div>
+              ) : (
+                <MessageTimeline
+                  history={history}
+                  events={events}
+                  isListening={isListening}
+                  greetingText={REALTIME_DEFAULTS.greeting}
+                />
+              )}
             </div>
             <div className="flex flex-col gap-3">
+              <MessageInput
+                value={message}
+                placeholder="Type a text-only prompt here."
+                disabled={!isConnected || isConnecting}
+                isSubmitting={isConnecting}
+                onChange={setMessage}
+                onSubmit={handleSubmitMessage}
+              />
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
@@ -77,6 +124,7 @@ export function RealtimeChat() {
               void connect();
             }}
           />
+          <EventFeed events={events} />
         </div>
       </div>
     </div>
