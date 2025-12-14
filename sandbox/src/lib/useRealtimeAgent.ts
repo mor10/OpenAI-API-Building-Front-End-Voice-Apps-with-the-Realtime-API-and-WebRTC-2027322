@@ -9,18 +9,24 @@
  * @link https://openai.github.io/openai-agents-js/guides/voice-agents/
  */
 
-/**
- * LESSON TASK:
- *
- * Import useEffect, useRef, useState, and RefObject from React
- */
-import { useCallback, useRef, useState, useRef useStatus } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 
 /**
  * LESSON TASK:
  *
- * Import RealtimeAgent and RealtimeSession from @openai/agents/realtime
+ * - Import RealtimeItem type for conversation history.
  */
+import {
+  RealtimeAgent,
+  RealtimeSession,
+  type TransportEvent,
+} from "@openai/agents/realtime";
 
 /**
  * ============================================================================
@@ -55,18 +61,22 @@ export type ConnectionState = "idle" | "connecting" | "connected";
 /**
  * LESSON TASK:
  *
- * Add sessionRef and config to UseRealtimeAgentResult type
+ * - Add isListening boolean to track if the agent is currently listening for audio input.
+ * - Add history of RealtimeItem[] to track the conversation history.
  */
 export type UseRealtimeAgentResult = {
   connect: () => Promise<void>;
   disconnect: () => void;
   toggleMute: () => void;
+  sendText: (message: string) => void;
   interrupt: () => void;
   connectionState: ConnectionState;
   isConnected: boolean;
   isConnecting: boolean;
   isMuted: boolean;
   error: string | null;
+  events: TransportEvent[];
+  sessionRef: RefObject<RealtimeSession | null>;
   config: RealtimeConfig;
 };
 
@@ -159,6 +169,12 @@ async function fetchRealtimeToken(authUrl: string) {
  */
 function resetRealtimeSession(session: RealtimeSession | null) {
   if (!session) return;
+  /**
+   * LESSON TASK:
+   *
+   * Call session.updateHistory with an empty array to clear history.
+   */
+
   session.close();
 }
 
@@ -186,7 +202,17 @@ export function useRealtimeAgent(): UseRealtimeAgentResult {
    * --------------------------------------------------------------------------
    * Refs and state hooks for tracking session, history, events, and UI state.
    */
+
+  /**
+   * LESSON TASK:
+   *
+   * - Add history state to track RealtimeItem[] conversation history.
+   * - Add isListening state to track if the agent is currently listening for audio input.
+   * - Add historyIndexRef to maintain an index map of item IDs to their positions in history.
+   * - Add suppressedItemIdsRef to track IDs of items to suppress from history.
+   */
   const sessionRef = useRef<RealtimeSession | null>(null);
+  const [events, setEvents] = useState<TransportEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("idle");
@@ -199,13 +225,115 @@ export function useRealtimeAgent(): UseRealtimeAgentResult {
    */
 
   useEffect(() => {
+    const agent = new RealtimeAgent({
+      name: "Assistant",
+      instructions: config.instructions,
+    });
+
+    const session = new RealtimeSession(agent, {
+      model: config.model,
+      config: {
+        audio: {
+          output: { voice: config.voice },
+        },
+      },
+    });
+
     /**
      * LESSON TASK:
      *
-     * Initialize RealtimeAgent and RealtimeSession inside useEffect
-     * - Create new RealtimeAgent with name "Assistant" and config.instructions
-     * - Create new RealtimeSession with the agent, config.model, and audio output voice
+     *  Get reference to suppressed items set for use in event handlers.
      */
+
+    /**
+     * Event handler: history_updated
+     * Fires on every history change (user messages, agent responses, function calls).
+     * Maintains an index map for efficient item lookups by ID.
+     */
+
+    /**
+     * LESSON TASK:
+     *
+     * - Implement handleHistoryUpdated to update history state.
+     * - Filter out suppressed items from history.
+     * - Update historyIndexRef with current item ID to index mappings.
+     */
+
+    /**
+     * Event handler: transport_event
+     * Processes Realtime server events.
+     * @link https://platform.openai.com/docs/api-reference/realtime-server-events
+     *
+     * - Updates the event log
+     * - Updates the text transcript (chat history)
+     * - Updates speech detection state
+     * - Maintains conversation item lifecycle (created/updated/completed/deleted)
+     */
+    const handleTransportEvent = (event: TransportEvent) => {
+      if (
+        event.type !== "response.output_audio_transcript.delta" &&
+        event.type !== "response.input_audio_transcription.delta"
+      ) {
+        console.log("Realtime Event:", event);
+      }
+
+      setEvents((prev) => {
+        const next = [...prev, event];
+        if (next.length > config.eventLogSize) {
+          return next.slice(next.length - config.eventLogSize);
+        }
+        return next;
+      });
+
+      /**
+       * LESSON TASK:
+       *
+       * Update isListening state based on speech_started and speech_stopped events.
+       */
+
+      /**
+       * LESSON TASK:
+       *
+       * Uncomment and inspect the following setup for maintaining conversation
+       * items in history based on server events.
+       */
+      // if (event.type === "conversation.item.created" && event.item) {
+      //   const item = event.item as RealtimeItem;
+      //   const id = (item as { itemId?: string }).itemId;
+      //   if (id && suppressedItems.has(id)) return;
+      //   setHistory((prev) => [...prev, item]);
+      // }
+
+      // if (
+      //   (event.type === "conversation.item.updated" ||
+      //     event.type === "conversation.item.completed") &&
+      //   event.item
+      // ) {
+      //   const item = event.item as RealtimeItem;
+      //   const id = (item as { itemId?: string }).itemId;
+      //   if (id && suppressedItems.has(id)) return;
+      //   setHistory((prev) => {
+      //     const idx = prev.findIndex(
+      //       (i) => (i as { itemId?: string }).itemId === id
+      //     );
+      //     if (idx !== -1) {
+      //       const next = [...prev];
+      //       next[idx] = item;
+      //       return next;
+      //     }
+      //     return [...prev, item];
+      //   });
+      // }
+
+      // if (event.type === "conversation.item.deleted" && event.item) {
+      //   const item = event.item as RealtimeItem;
+      //   const id = (item as { itemId?: string }).itemId;
+      //   if (!id) return;
+      //   setHistory((prev) =>
+      //     prev.filter((i) => (i as { itemId?: string }).itemId !== id)
+      //   );
+      // }
+    };
 
     /**
      * Event handler: error
@@ -247,10 +375,26 @@ export function useRealtimeAgent(): UseRealtimeAgentResult {
 
     // Store session reference and attach event listeners
     sessionRef.current = session;
+
+    /**
+     * LESSON TASK:
+     *
+     * - Attach event listeners for history_updated calling handleHistoryUpdated.
+     */
+    session.on("transport_event", handleTransportEvent);
     session.on("error", handleError);
 
     // Cleanup function: detach listeners, close session, clear refs
+
+    /**
+     * LESSON TASK:
+     *
+     * - Detach history_updated listener.
+     * - Clear history and index refs.
+     * - Clear suppressed items ref.
+     */
     return () => {
+      session.off("transport_event", handleTransportEvent);
       session.off("error", handleError);
       session.close();
       sessionRef.current = null;
@@ -267,9 +411,17 @@ export function useRealtimeAgent(): UseRealtimeAgentResult {
   /**
    * Disconnects the session and resets all state to initial values.
    */
+
+  /**
+   * LESSON TASK:
+   *
+   * - Clear history state on disconnect.
+   * - Reset isListening state on disconnect.
+   */
   const disconnect = useCallback(() => {
     if (!sessionRef.current) return;
     resetRealtimeSession(sessionRef.current);
+    setEvents([]);
     setIsMuted(false);
     setError(null);
     setConnectionState("idle");
@@ -280,38 +432,29 @@ export function useRealtimeAgent(): UseRealtimeAgentResult {
    * Fetches ephemeral token and establishes WebSocket connection.
    * If already connected, disconnects instead (toggle behavior).
    */
+  const connect = useCallback(async () => {
+    if (!sessionRef.current) return;
+    if (connectionState === "connecting") return;
 
-  /**
-   * LESSON TASK:
-   *
-   * Uncomment and review the connect function below.
-   *
-   * The session connection is created on this line:
-   * `await sessionRef.current.connect({ apiKey });`
-   */
-  // const connect = useCallback(async () => {
-  //   if (!sessionRef.current) return;
-  //   if (connectionState === "connecting") return;
+    if (connectionState === "connected") {
+      disconnect();
+      return;
+    }
 
-  //   if (connectionState === "connected") {
-  //     disconnect();
-  //     return;
-  //   }
-
-  //   setError(null);
-  //   setConnectionState("connecting");
-  //   try {
-  //     const apiKey = await fetchRealtimeToken(config.authUrl);
-  //     await sessionRef.current.connect({ apiKey });
-  //     setConnectionState("connected");
-  //     setIsMuted(Boolean(sessionRef.current.muted));
-  //   } catch (err) {
-  //     const message =
-  //       err instanceof Error ? err.message : "Unable to connect to session";
-  //     setError(message);
-  //     setConnectionState("idle");
-  //   }
-  // }, [config.authUrl, connectionState, disconnect]);
+    setError(null);
+    setConnectionState("connecting");
+    try {
+      const apiKey = await fetchRealtimeToken(config.authUrl);
+      await sessionRef.current.connect({ apiKey });
+      setConnectionState("connected");
+      setIsMuted(Boolean(sessionRef.current.muted));
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Unable to connect to session";
+      setError(message);
+      setConnectionState("idle");
+    }
+  }, [config.authUrl, connectionState, disconnect]);
 
   /**
    * Toggles audio input mute state.
@@ -322,6 +465,20 @@ export function useRealtimeAgent(): UseRealtimeAgentResult {
     const newMuted = !(sessionRef.current.muted ?? false);
     sessionRef.current.mute(newMuted);
     setIsMuted(newMuted);
+  }, []);
+
+  /**
+   * Sends a text message to the agent, which will respond with spoken audio.
+   * Primary method for text-based interaction.
+   */
+  const sendText = useCallback((message: string) => {
+    if (!sessionRef.current || !message.trim()) return;
+    setError(null);
+    sessionRef.current.sendMessage({
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: message.trim() }],
+    });
   }, []);
 
   /**
@@ -343,17 +500,21 @@ export function useRealtimeAgent(): UseRealtimeAgentResult {
   /**
    * LESSON TASK:
    *
-   * Add connect to the returned object
+   * - Include isListening and history in the returned object.
    */
   return {
+    connect,
     disconnect,
     toggleMute,
+    sendText,
     interrupt,
     connectionState,
     isConnected: connectionState === "connected",
     isConnecting: connectionState === "connecting",
     isMuted,
     error,
+    events,
+    sessionRef,
     config,
   };
 }
